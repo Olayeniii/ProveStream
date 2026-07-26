@@ -1,1 +1,0 @@
-{"root":["./src/App.tsx","./src/env.ts","./src/main.tsx","./src/vite-env.d.ts","./src/components/AttestationForm.tsx","./src/components/TransactionResult.tsx","./src/lib/clients.ts","./src/pages/Home.tsx","./src/styles/GlobalStyle.ts","./src/styles/styled.d.ts","./src/styles/theme.ts"],"version":"5.9.3"}
