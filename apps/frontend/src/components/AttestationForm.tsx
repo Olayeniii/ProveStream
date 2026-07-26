@@ -49,11 +49,7 @@ export function AttestationForm({ submitting, onSubmit }: AttestationFormProps) 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
-    const { errors: validationErrors, policyIdNumber } = parseValues(
-      supplier,
-      policyId,
-      proofHash,
-    );
+    const { errors: validationErrors, policyIdNumber } = parseValues(supplier, policyId, proofHash);
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) {
       return;

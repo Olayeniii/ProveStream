@@ -11,8 +11,7 @@ export const theme = {
     error: '#f85149',
   },
   radius: '10px',
-  fontFamily:
-    "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
 } as const;
 
 export type Theme = typeof theme;
