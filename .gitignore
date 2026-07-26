@@ -1,6 +1,7 @@
 node_modules/
 dist/
 coverage/
+*.tsbuildinfo
 .env
 .env.local
 *.log
@@ -17,3 +18,4 @@ ignition/deployments/
 !.vscode/extensions.json
 
 provenance-streams-milestone-1.md
+docs/

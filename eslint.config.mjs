@@ -17,10 +17,7 @@ export default tseslint.config(
       },
     },
     rules: {
-      '@typescript-eslint/consistent-type-imports': [
-        'error',
-        { fixStyle: 'inline-type-imports' },
-      ],
+      '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
       '@typescript-eslint/no-floating-promises': 'error',
     },
   },
@@ -33,4 +30,3 @@ export default tseslint.config(
     },
   },
 );
-
