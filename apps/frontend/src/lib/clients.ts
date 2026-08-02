@@ -46,9 +46,49 @@ export async function connectWallet(env: AppEnv): Promise<WalletClient> {
     throw new Error('Wallet connection was rejected.');
   }
 
+  await ensureCorrectNetwork(env);
+
   return createWalletClient({
     account,
     chain: resolveChain(env),
     transport: custom(window.ethereum),
   });
+}
+
+/**
+ * Switches the injected wallet to the configured chain, adding it first if
+ * the wallet doesn't already know about it (error code 4902). Without this,
+ * a wallet left on e.g. Ethereum Mainnet only finds out it's on the wrong
+ * network when the contract call itself fails — this asks upfront instead.
+ */
+async function ensureCorrectNetwork(env: AppEnv): Promise<void> {
+  const chain = resolveChain(env);
+  const chainIdHex = `0x${chain.id.toString(16)}`;
+
+  try {
+    await window.ethereum!.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: chainIdHex }],
+    });
+  } catch (error) {
+    const code = (error as { code?: number } | undefined)?.code;
+    if (code !== 4902) {
+      throw error;
+    }
+
+    await window.ethereum!.request({
+      method: 'wallet_addEthereumChain',
+      params: [
+        {
+          chainId: chainIdHex,
+          chainName: chain.name,
+          nativeCurrency: chain.nativeCurrency,
+          rpcUrls: [env.rpcUrl],
+          blockExplorerUrls: chain.blockExplorers?.default.url
+            ? [chain.blockExplorers.default.url]
+            : undefined,
+        },
+      ],
+    });
+  }
 }
