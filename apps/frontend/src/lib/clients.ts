@@ -1,13 +1,29 @@
-import { hardhatLocal } from '@provenance-streams/protocol';
-import type { PublicClient, WalletClient } from 'viem';
+import { arcTestnet, hardhatLocal } from '@provenance-streams/protocol';
+import type { Chain, PublicClient, WalletClient } from 'viem';
 import { createPublicClient, createWalletClient, custom, http } from 'viem';
 
 import type { AppEnv } from '../env.js';
 
+/**
+ * Resolves the configured chain's real definition (name, native currency,
+ * block explorer) by id, instead of assuming local Hardhat — prompts and
+ * error messages shown by the injected wallet (e.g. "wrong network") need
+ * the real name to make sense once `VITE_CHAIN_ID` points at Arc testnet.
+ */
+function resolveChain(env: AppEnv): Chain {
+  if (env.chainId === arcTestnet.id) {
+    return arcTestnet;
+  }
+  if (env.chainId === hardhatLocal.id) {
+    return hardhatLocal;
+  }
+  return { ...hardhatLocal, id: env.chainId, name: `Chain ${env.chainId.toString()}` };
+}
+
 /** A read-only client for the configured chain, used to await transaction receipts. */
 export function getPublicClient(env: AppEnv): PublicClient {
   return createPublicClient({
-    chain: { ...hardhatLocal, id: env.chainId },
+    chain: resolveChain(env),
     transport: http(env.rpcUrl),
   });
 }
@@ -32,7 +48,7 @@ export async function connectWallet(env: AppEnv): Promise<WalletClient> {
 
   return createWalletClient({
     account,
-    chain: { ...hardhatLocal, id: env.chainId },
+    chain: resolveChain(env),
     transport: custom(window.ethereum),
   });
 }
