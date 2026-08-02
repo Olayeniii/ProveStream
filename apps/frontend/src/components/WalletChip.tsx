@@ -1,4 +1,5 @@
-import { LogOut, User } from 'lucide-react';
+import { Check, Copy, LogOut, User } from 'lucide-react';
+import { useState } from 'react';
 import styled from 'styled-components';
 
 export function WalletChip({
@@ -10,6 +11,18 @@ export function WalletChip({
   role: string;
   onSignOut: () => void;
 }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    navigator.clipboard
+      ?.writeText(address)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => undefined);
+  }
+
   return (
     <Chip>
       <Avatar>
@@ -19,6 +32,9 @@ export function WalletChip({
         <Address>{`${address.slice(0, 6)}…${address.slice(-4)}`}</Address>
         <Role>{role}</Role>
       </TextColumn>
+      <CopyButton type="button" onClick={handleCopy} aria-label="Copy wallet address">
+        {copied ? <Check size={14} /> : <Copy size={14} />}
+      </CopyButton>
       <SignOutButton type="button" onClick={onSignOut} aria-label="Sign out">
         <LogOut size={14} />
       </SignOutButton>
@@ -64,6 +80,19 @@ const Address = styled.span`
 const Role = styled.span`
   font-size: 0.72rem;
   color: ${(props) => props.theme.colors.textMuted};
+`;
+
+const CopyButton = styled.button`
+  border: none;
+  background: none;
+  padding: 2px;
+  display: flex;
+  cursor: pointer;
+  color: ${(props) => props.theme.colors.textMuted};
+
+  &:hover {
+    color: ${(props) => props.theme.colors.primary};
+  }
 `;
 
 const SignOutButton = styled.button`
