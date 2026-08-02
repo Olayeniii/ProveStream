@@ -12,6 +12,11 @@ const circleSchema = z.object({
   treasuryBlockchain: z.string().min(1),
 });
 
+const embeddedWalletSchema = z.object({
+  apiKey: z.string().min(1),
+  appId: z.string().min(1),
+});
+
 const serverConfigSchema = z.object({
   port: z.coerce.number().int().positive().default(4000),
   corsOrigin: z.string().min(1).default('http://localhost:5173'),
@@ -37,7 +42,7 @@ export interface ServerConfig {
   rewardDispatcherAddress: `0x${string}`;
   /** Full agent config, ready to pass to `runAgent`. */
   agentConfig: AgentConfigInput;
-  /** Present only when Circle credentials are configured for embedded wallets. */
+  /** Present only when the full Circle credential set is configured for the treasury DCW. */
   circle:
     | {
         apiKey: string;
@@ -47,6 +52,12 @@ export interface ServerConfig {
         treasuryBlockchain: string;
       }
     | undefined;
+  /**
+   * Present whenever `CIRCLE_API_KEY` / `CIRCLE_APP_ID` are set, independent of
+   * whether the full treasury credential set (above) is also configured —
+   * embedded wallets don't need `entitySecret` or a treasury wallet id.
+   */
+  embeddedWallet: { apiKey: string; appId: string } | undefined;
   /** Present only when `GEMINI_API_KEY` is configured for AI risk analysis. */
   gemini: { apiKey: string; model: string } | undefined;
 }
@@ -80,6 +91,7 @@ export function loadServerConfig(): ServerConfig {
   });
 
   const circleParsed = circleSchema.safeParse(raw.circle);
+  const embeddedWalletParsed = embeddedWalletSchema.safeParse(raw.circle);
   const treasury: AgentConfigInput['treasury'] = circleParsed.success
     ? {
         mode: 'circle',
@@ -119,6 +131,7 @@ export function loadServerConfig(): ServerConfig {
           treasuryBlockchain: circleParsed.data.treasuryBlockchain,
         }
       : undefined,
+    embeddedWallet: embeddedWalletParsed.success ? embeddedWalletParsed.data : undefined,
     gemini: raw.geminiApiKey ? { apiKey: raw.geminiApiKey, model: raw.geminiModel } : undefined,
   };
 }

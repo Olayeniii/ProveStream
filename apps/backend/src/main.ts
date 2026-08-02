@@ -27,8 +27,8 @@ try {
     rpcUrl: config.rpcUrl,
     rewardPolicyAddress: config.rewardPolicyAddress,
   });
-  const walletService: WalletService | undefined = config.circle
-    ? new WalletService({ apiKey: config.circle.apiKey, appId: config.circle.appId })
+  const walletService: WalletService | undefined = config.embeddedWallet
+    ? new WalletService({ apiKey: config.embeddedWallet.apiKey, appId: config.embeddedWallet.appId })
     : undefined;
   const riskAnalysisService: RiskAnalysisService | undefined = config.gemini
     ? new RiskAnalysisService({ apiKey: config.gemini.apiKey, model: config.gemini.model })
@@ -114,7 +114,7 @@ try {
 
   const server = app.listen(config.port, () => {
     console.log(`Backend API listening on http://localhost:${config.port.toString()}`);
-    if (!config.circle) {
+    if (!config.embeddedWallet) {
       console.log(
         'Embedded wallets are disabled: set CIRCLE_API_KEY / CIRCLE_APP_ID to enable them.',
       );
