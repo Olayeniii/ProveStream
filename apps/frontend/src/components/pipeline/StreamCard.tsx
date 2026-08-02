@@ -1,5 +1,6 @@
 import styled from 'styled-components';
 
+import { formatReward } from '../../lib/format.js';
 import type { Stream, StreamTone } from '../../lib/streams.js';
 import { getOverallStatus } from '../../lib/streams.js';
 
@@ -21,7 +22,7 @@ export function StreamCard({
         <Badge $tone={status.tone}>{status.label}</Badge>
       </TopRow>
       <Subtitle>{stream.policy?.credentialType ?? `Policy #${stream.attestation.policyId}`}</Subtitle>
-      {stream.payment && <Amount>{stream.payment.rewardAmount} (raw units)</Amount>}
+      {stream.payment && <Amount>{formatReward(stream.payment.rewardAmount)}</Amount>}
       <MiniPipeline>
         {stream.nodes.map((node) => (
           <Dot key={node.key} $status={node.status} title={node.label} />

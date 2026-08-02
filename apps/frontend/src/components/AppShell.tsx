@@ -4,7 +4,6 @@ import {
   BarChart3,
   Bell,
   ChevronDown,
-  Circle,
   FileText,
   Landmark,
   ShieldCheck,
@@ -21,6 +20,7 @@ import { formatUnits } from 'viem';
 import logo from '../assets/logo.png';
 import type { AppEnv } from '../env.js';
 import type { ApiClient } from '../lib/api.js';
+import { formatAmount } from '../lib/format.js';
 
 const NAV_ITEMS = [
   { to: '/streams', label: 'Streams', icon: Activity },
@@ -67,14 +67,14 @@ export function AppShell({
       .then((payments) => {
         const complete = payments.filter((payment) => payment.status === 'complete');
         const total = complete.reduce((sum, payment) => sum + BigInt(payment.rewardAmount), 0n);
-        setTotalRewardsPaid(formatUnits(total, 18));
+        setTotalRewardsPaid(formatAmount(formatUnits(total, 18), 4));
         setStreamCount(payments.length);
       })
       .catch(() => undefined);
 
     api
       .getTreasuryBalance()
-      .then((balance) => setTreasuryLabel(`${balance.amount} ${balance.symbol}`))
+      .then((balance) => setTreasuryLabel(`${formatAmount(balance.amount, 4)} USDC`))
       .catch(() => undefined);
   }, [api]);
 
@@ -115,7 +115,13 @@ export function AppShell({
           </Widget>
         </Widgets>
 
-        <Footer>Powered by Circle</Footer>
+        <Footer>
+          Powered by
+          <CircleLogo
+            src="https://cdn.prod.website-files.com/67116d0daddc92483c812e88/67116d0daddc92483c812f72_Circle%20Logo.avif"
+            alt="Circle"
+          />
+        </Footer>
       </Sidebar>
 
       <Main>
@@ -209,7 +215,7 @@ const StyledNavLink = styled(NavLink)`
 `;
 
 const Widgets = styled.div`
-  margin-top: auto;
+  margin-top: 32px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -235,6 +241,7 @@ const WidgetValue = styled.span`
   font-size: 1.1rem;
   font-weight: 700;
   color: ${(props) => props.theme.colors.text};
+  word-break: break-word;
 `;
 
 const WidgetCaption = styled.span`
@@ -255,9 +262,19 @@ const TreasuryIcon = styled.div`
 `;
 
 const Footer = styled.div`
+  margin-top: 32px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 0 8px;
   font-size: 0.75rem;
   color: ${(props) => props.theme.colors.textMuted};
+`;
+
+const CircleLogo = styled.img`
+  height: 16px;
+  width: auto;
+  object-fit: contain;
 `;
 
 const Main = styled.main`

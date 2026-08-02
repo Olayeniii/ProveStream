@@ -2,6 +2,7 @@ import { Check, Copy } from 'lucide-react';
 import { useState } from 'react';
 import styled from 'styled-components';
 
+import { formatReward } from '../../lib/format.js';
 import type { Stream } from '../../lib/streams.js';
 import { getOverallStatus } from '../../lib/streams.js';
 
@@ -17,7 +18,7 @@ export function RewardDetailsPanel({ stream }: { stream: Stream }) {
       <PanelTitle>Reward Details</PanelTitle>
       <Row>
         <Label>Amount</Label>
-        <Value>{stream.payment ? `${stream.payment.rewardAmount} (raw units)` : '—'}</Value>
+        <Value>{stream.payment ? formatReward(stream.payment.rewardAmount) : '—'}</Value>
       </Row>
       <Row>
         <Label>Policy</Label>

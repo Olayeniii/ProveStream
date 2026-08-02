@@ -68,14 +68,13 @@ export function StreamsOverview({ env, api }: { env: AppEnv; api: ApiClient }) {
             <DetailGrid>
               <TimelineCard>
                 <TimelineSplit>
-                  <div>
+                  <TimelineColumn>
                     <PanelTitle>Stream Timeline</PanelTitle>
                     <StreamTimeline nodes={selected.nodes} />
-                  </div>
-                  <div>
-                    <PanelTitle>How it flows</PanelTitle>
+                  </TimelineColumn>
+                  <FlowBox>
                     <FlowDiagram />
-                  </div>
+                  </FlowBox>
                 </TimelineSplit>
               </TimelineCard>
               <SidePanels>
@@ -160,12 +159,26 @@ const PanelTitle = styled.h3`
 
 const TimelineSplit = styled.div`
   display: grid;
-  grid-template-columns: 1.2fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 24px;
+  align-items: start;
 
   @media (max-width: 700px) {
     grid-template-columns: 1fr;
   }
+`;
+
+const TimelineColumn = styled.div`
+  min-width: 0;
+`;
+
+const FlowBox = styled.div`
+  padding: 16px;
+  border-radius: ${(props) => props.theme.radius.card};
+  border: 1px solid ${(props) => props.theme.colors.border};
+  display: flex;
+  align-items: center;
+  justify-content: center;
 `;
 
 const SidePanels = styled.div`

@@ -6,6 +6,7 @@ import { formatUnits } from 'viem';
 import { AppShell } from '../components/AppShell.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
+import { formatAmount } from '../lib/format.js';
 import { buildStreams, getOverallStatus } from '../lib/streams.js';
 
 function formatDuration(seconds: number): string {
@@ -54,11 +55,14 @@ export function AnalyticsPage({ env, api }: { env: AppEnv; api: ApiClient }) {
 
   const totalRewardsPaid = useMemo(
     () =>
-      formatUnits(
-        payments
-          .filter((payment) => payment.status === 'complete')
-          .reduce((sum, payment) => sum + BigInt(payment.rewardAmount), 0n),
-        18,
+      formatAmount(
+        formatUnits(
+          payments
+            .filter((payment) => payment.status === 'complete')
+            .reduce((sum, payment) => sum + BigInt(payment.rewardAmount), 0n),
+          18,
+        ),
+        4,
       ),
     [payments],
   );

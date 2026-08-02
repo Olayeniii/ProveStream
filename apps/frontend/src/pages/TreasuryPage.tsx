@@ -5,6 +5,7 @@ import styled from 'styled-components';
 import { AppShell } from '../components/AppShell.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, TreasuryBalance } from '../lib/api.js';
+import { formatAmount } from '../lib/format.js';
 
 export function TreasuryPage({ env, api }: { env: AppEnv; api: ApiClient }) {
   const [treasury, setTreasury] = useState<TreasuryBalance | undefined>(undefined);
@@ -25,7 +26,9 @@ export function TreasuryPage({ env, api }: { env: AppEnv; api: ApiClient }) {
     <AppShell title="Treasury" subtitle="Balance and recent settlements" env={env} api={api}>
       <Card>
         <SectionTitle>Balance</SectionTitle>
-        <BalanceValue>{treasury ? `${treasury.amount} ${treasury.symbol}` : 'Loading…'}</BalanceValue>
+        <BalanceValue>
+          {treasury ? `${formatAmount(treasury.amount, 4)} USDC` : 'Loading…'}
+        </BalanceValue>
       </Card>
 
       <Card>

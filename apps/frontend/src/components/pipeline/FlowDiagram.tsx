@@ -1,5 +1,5 @@
 import { Bot, RefreshCw, ShieldCheck, Target, User, Wallet } from 'lucide-react';
-import styled, { keyframes } from 'styled-components';
+import styled from 'styled-components';
 
 const NODES = {
   auditor: { label: 'Auditor', icon: User, color: 'primary' as const },
