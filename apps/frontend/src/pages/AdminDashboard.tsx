@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 
 import { AppShell } from '../components/AppShell.js';
+import type { AppEnv } from '../env.js';
 import type { ApiClient, AttestationRecord } from '../lib/api.js';
 
 interface HealthState {
@@ -10,7 +11,7 @@ interface HealthState {
   treasury: 'ok' | 'error' | 'checking';
 }
 
-export function AdminDashboard({ api }: { api: ApiClient }) {
+export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
   const [attestations, setAttestations] = useState<AttestationRecord[]>([]);
   const [health, setHealth] = useState<HealthState>({ backend: 'checking', treasury: 'checking' });
 
@@ -41,7 +42,7 @@ export function AdminDashboard({ api }: { api: ApiClient }) {
   }, [attestations]);
 
   return (
-    <AppShell title="Admin" subtitle="Known auditors and system health" api={api}>
+    <AppShell title="Admin" subtitle="Known auditors and system health" env={env} api={api}>
       <Card>
         <SectionTitle>Health</SectionTitle>
         <HealthRow>

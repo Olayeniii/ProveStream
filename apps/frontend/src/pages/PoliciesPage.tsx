@@ -52,7 +52,12 @@ export function PoliciesPage({ env, api }: { env: AppEnv; api: ApiClient }) {
   }
 
   return (
-    <AppShell title="Policies" subtitle="Configure which credentials earn a reward, and how much" api={api}>
+    <AppShell
+      title="Policies"
+      subtitle="Configure which credentials earn a reward, and how much"
+      env={env}
+      api={api}
+    >
       <Card>
         <SectionTitle>Create a policy</SectionTitle>
         <Form onSubmit={(event) => void handleCreatePolicy(event)}>

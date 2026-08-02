@@ -4,6 +4,7 @@ import {
   BarChart3,
   Bell,
   ChevronDown,
+  Circle,
   FileText,
   Landmark,
   ShieldCheck,

@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 
 import { AppShell } from '../components/AppShell.js';
+import { FlowDiagram } from '../components/pipeline/FlowDiagram.js';
 import { PipelineView } from '../components/pipeline/PipelineView.js';
 import { RewardDetailsPanel } from '../components/pipeline/RewardDetailsPanel.js';
+import { RewardMetricsStrip } from '../components/pipeline/RewardMetricsStrip.js';
 import { RiskAnalysisPanel } from '../components/pipeline/RiskAnalysisPanel.js';
 import { StreamActionsPanel } from '../components/pipeline/StreamActionsPanel.js';
 import { StreamCard } from '../components/pipeline/StreamCard.js';
@@ -42,7 +44,12 @@ export function StreamsOverview({ env, api }: { env: AppEnv; api: ApiClient }) {
   const selected = streams.find((stream) => stream.id === selectedId) ?? streams[0];
 
   return (
-    <AppShell title="Streams" subtitle="Following the journey from attestation to reward" api={api}>
+    <AppShell
+      title="Streams"
+      subtitle="Following the journey from attestation to reward"
+      env={env}
+      api={api}
+    >
       {streams.length === 0 ? (
         <Empty>No streams yet. Submit an attestation from the Auditor page to start one.</Empty>
       ) : (
@@ -53,18 +60,27 @@ export function StreamsOverview({ env, api }: { env: AppEnv; api: ApiClient }) {
                 <DetailTitle>Attestation #{selected.id}</DetailTitle>
               </DetailHeader>
               <PipelineView nodes={selected.nodes} />
+              <RewardMetricsStrip stream={selected} />
             </DetailCard>
           )}
 
           {selected && (
             <DetailGrid>
               <TimelineCard>
-                <PanelTitle>Stream Timeline</PanelTitle>
-                <StreamTimeline nodes={selected.nodes} />
+                <TimelineSplit>
+                  <div>
+                    <PanelTitle>Stream Timeline</PanelTitle>
+                    <StreamTimeline nodes={selected.nodes} />
+                  </div>
+                  <div>
+                    <PanelTitle>How it flows</PanelTitle>
+                    <FlowDiagram />
+                  </div>
+                </TimelineSplit>
               </TimelineCard>
               <SidePanels>
                 <RewardDetailsPanel stream={selected} />
-                <RiskAnalysisPanel />
+                <RiskAnalysisPanel stream={selected} />
                 <StreamActionsPanel stream={selected} env={env} />
               </SidePanels>
             </DetailGrid>
@@ -98,6 +114,9 @@ const DetailCard = styled.div`
   border-radius: ${(props) => props.theme.radius.card};
   border: 1px solid ${(props) => props.theme.colors.border};
   background: ${(props) => props.theme.colors.surface};
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 `;
 
 const DetailHeader = styled.div`
@@ -134,9 +153,19 @@ const TimelineCard = styled.div`
 `;
 
 const PanelTitle = styled.h3`
-  margin: 0;
+  margin: 0 0 12px;
   font-size: 1rem;
   color: ${(props) => props.theme.colors.text};
+`;
+
+const TimelineSplit = styled.div`
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 24px;
+
+  @media (max-width: 700px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 const SidePanels = styled.div`

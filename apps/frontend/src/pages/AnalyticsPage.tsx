@@ -4,6 +4,7 @@ import styled from 'styled-components';
 import { formatUnits } from 'viem';
 
 import { AppShell } from '../components/AppShell.js';
+import type { AppEnv } from '../env.js';
 import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
 import { buildStreams, getOverallStatus } from '../lib/streams.js';
 
@@ -17,7 +18,7 @@ function formatDuration(seconds: number): string {
   return `${(seconds / 3600).toFixed(1)}h`;
 }
 
-export function AnalyticsPage({ api }: { api: ApiClient }) {
+export function AnalyticsPage({ env, api }: { env: AppEnv; api: ApiClient }) {
   const [attestations, setAttestations] = useState<AttestationRecord[]>([]);
   const [policies, setPolicies] = useState<PolicySummary[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -84,7 +85,7 @@ export function AnalyticsPage({ api }: { api: ApiClient }) {
   }, [attestations, payments]);
 
   return (
-    <AppShell title="Analytics" subtitle="Aggregate stream and settlement metrics" api={api}>
+    <AppShell title="Analytics" subtitle="Aggregate stream and settlement metrics" env={env} api={api}>
       <StatGrid>
         <StatCard>
           <StatLabel>Total Streams</StatLabel>

@@ -9,12 +9,13 @@ import { StreamCard } from '../components/pipeline/StreamCard.js';
 import type { SubmissionStatus } from '../components/TransactionResult.js';
 import { TransactionResult } from '../components/TransactionResult.js';
 import { WalletChip } from '../components/WalletChip.js';
+import type { AppEnv } from '../env.js';
 import { useEmbeddedWallet } from '../hooks/useEmbeddedWallet.js';
 import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
 import { buildStreams } from '../lib/streams.js';
 import type { Payment } from '@provenance-streams/protocol';
 
-export function AuditorDashboard({ api }: { api: ApiClient }) {
+export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
   const wallet = useEmbeddedWallet('auditor', api);
   const [status, setStatus] = useState<SubmissionStatus>({ state: 'idle' });
   const [attestations, setAttestations] = useState<AttestationRecord[]>([]);
@@ -70,10 +71,11 @@ export function AuditorDashboard({ api }: { api: ApiClient }) {
     <AppShell
       title="Auditor"
       subtitle="Submit attestations and track their streams"
+      env={env}
       api={api}
       headerActions={
         wallet.status === 'ready' && wallet.walletAddress ? (
-          <WalletChip address={wallet.walletAddress} onSignOut={wallet.logout} />
+          <WalletChip address={wallet.walletAddress} role="Auditor Wallet" onSignOut={wallet.logout} />
         ) : undefined
       }
     >

@@ -10,6 +10,9 @@ export interface StreamNode {
   status: NodeStatus;
   timestamp?: string | undefined;
   detail?: string | undefined;
+  /** Only populated on the ai-risk-analysis node once a real score exists. */
+  score?: number | undefined;
+  confidence?: number | undefined;
 }
 
 export interface Stream {

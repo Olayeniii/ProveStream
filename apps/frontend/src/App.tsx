@@ -24,12 +24,12 @@ export function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/streams" replace />} />
           <Route path="/streams" element={<StreamsOverview env={env} api={api} />} />
-          <Route path="/auditor" element={<AuditorDashboard api={api} />} />
+          <Route path="/auditor" element={<AuditorDashboard env={env} api={api} />} />
           <Route path="/supplier" element={<SupplierDashboard env={env} api={api} />} />
           <Route path="/policies" element={<PoliciesPage env={env} api={api} />} />
-          <Route path="/treasury" element={<TreasuryPage api={api} />} />
-          <Route path="/analytics" element={<AnalyticsPage api={api} />} />
-          <Route path="/admin" element={<AdminDashboard api={api} />} />
+          <Route path="/treasury" element={<TreasuryPage env={env} api={api} />} />
+          <Route path="/analytics" element={<AnalyticsPage env={env} api={api} />} />
+          <Route path="/admin" element={<AdminDashboard env={env} api={api} />} />
         </Routes>
       </Router>
     </ThemeProvider>

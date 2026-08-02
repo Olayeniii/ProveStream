@@ -59,10 +59,11 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
     <AppShell
       title="Supplier"
       subtitle="Wallet, rewards, and completed streams"
+      env={env}
       api={api}
       headerActions={
         wallet.status === 'ready' && wallet.walletAddress ? (
-          <WalletChip address={wallet.walletAddress} onSignOut={wallet.logout} />
+          <WalletChip address={wallet.walletAddress} role="Supplier Wallet" onSignOut={wallet.logout} />
         ) : undefined
       }
     >
