@@ -1,0 +1,18 @@
+sequenceDiagram
+    participant Auditor
+    participant Frontend
+    participant Registry as AttestationRegistry
+    participant Dispatcher as RewardDispatcher
+    participant Agent as Autonomous Settlement Agent
+    participant DCW as Developer Controlled Wallet
+    participant Supplier
+
+    Auditor->>Frontend: Sign in with Embedded Wallet
+    Frontend->>Registry: submitAttestation(supplier, proofHash, policyId)
+    Registry-->>Agent: AttestationSubmitted event
+    Agent->>Agent: evaluateReward(attestation)
+    Agent->>Dispatcher: dispatchReward(attestationId)
+    Dispatcher-->>Agent: RewardEligible event
+    Agent->>DCW: sendReward(supplier, rewardAmount)
+    DCW->>Supplier: USDC transfer
+    DCW-->>Agent: transaction hash
