@@ -26,6 +26,7 @@ try {
   const policyService = new PolicyService({
     rpcUrl: config.rpcUrl,
     rewardPolicyAddress: config.rewardPolicyAddress,
+    deployedAtBlock: config.rewardPolicyDeployedAtBlock,
   });
   const walletService: WalletService | undefined = config.embeddedWallet
     ? new WalletService({ apiKey: config.embeddedWallet.apiKey, appId: config.embeddedWallet.appId })

@@ -13,7 +13,13 @@ export interface PolicySummary {
 export interface PolicyServiceConfig {
   rpcUrl: string;
   rewardPolicyAddress: Address;
+  /** Block `RewardPolicy` was deployed at — scanning starts here instead of genesis. */
+  deployedAtBlock?: bigint;
 }
+
+// Comfortably under the 10,000-block range many public RPC providers (including
+// Arc testnet's) enforce per `eth_getLogs` call.
+const LOG_SCAN_CHUNK_BLOCKS = 9_000n;
 
 /**
  * Reads `RewardPolicy` for the admin dashboard. `RewardPolicy.sol` only
@@ -31,13 +37,7 @@ export class PolicyService {
   }
 
   async listPolicies(): Promise<PolicySummary[]> {
-    const logs = await this.client.getContractEvents({
-      address: this.config.rewardPolicyAddress,
-      abi: rewardPolicyAbi,
-      eventName: 'PolicyCreated',
-      fromBlock: 0n,
-      toBlock: 'latest',
-    });
+    const logs = await this.scanPolicyCreatedLogs();
 
     const ids = [
       ...new Set(logs.map((log) => log.args.id).filter((id): id is bigint => id !== undefined)),
@@ -62,5 +62,33 @@ export class PolicyService {
     );
 
     return policies.sort((a, b) => Number(b.id) - Number(a.id));
+  }
+
+  /**
+   * `eth_getLogs` is capped to a fixed block range on many providers (Arc
+   * testnet included, at 10,000 blocks) — scanning `fromBlock: 0n` in one call
+   * breaks the moment a chain has meaningful history. This walks the range in
+   * chunks instead, starting from the contract's deployment block rather than
+   * genesis.
+   */
+  private async scanPolicyCreatedLogs() {
+    const fromBlock = this.config.deployedAtBlock ?? 0n;
+    const latestBlock = await this.client.getBlockNumber();
+
+    const logs = [];
+    for (let start = fromBlock; start <= latestBlock; start += LOG_SCAN_CHUNK_BLOCKS) {
+      const end = start + LOG_SCAN_CHUNK_BLOCKS - 1n > latestBlock
+        ? latestBlock
+        : start + LOG_SCAN_CHUNK_BLOCKS - 1n;
+      const chunk = await this.client.getContractEvents({
+        address: this.config.rewardPolicyAddress,
+        abi: rewardPolicyAbi,
+        eventName: 'PolicyCreated',
+        fromBlock: start,
+        toBlock: end,
+      });
+      logs.push(...chunk);
+    }
+    return logs;
   }
 }

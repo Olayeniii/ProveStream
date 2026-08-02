@@ -30,6 +30,7 @@ const serverConfigSchema = z.object({
   circle: circleSchema.partial(),
   geminiApiKey: z.string().optional(),
   geminiModel: z.string().min(1).default('gemini-2.0-flash'),
+  rewardPolicyDeployedAtBlock: z.coerce.bigint().default(0n),
 });
 
 export interface ServerConfig {
@@ -40,6 +41,8 @@ export interface ServerConfig {
   attestationRegistryAddress: `0x${string}`;
   rewardPolicyAddress: `0x${string}`;
   rewardDispatcherAddress: `0x${string}`;
+  /** Block `RewardPolicy` was deployed at, so `PolicyService` doesn't scan from genesis. */
+  rewardPolicyDeployedAtBlock: bigint;
   /** Full agent config, ready to pass to `runAgent`. */
   agentConfig: AgentConfigInput;
   /** Present only when the full Circle credential set is configured for the treasury DCW. */
@@ -88,6 +91,7 @@ export function loadServerConfig(): ServerConfig {
     },
     geminiApiKey: process.env.GEMINI_API_KEY,
     geminiModel: process.env.GEMINI_MODEL,
+    rewardPolicyDeployedAtBlock: process.env.REWARD_POLICY_DEPLOYED_AT_BLOCK,
   });
 
   const circleParsed = circleSchema.safeParse(raw.circle);
@@ -113,6 +117,7 @@ export function loadServerConfig(): ServerConfig {
     attestationRegistryAddress: raw.attestationRegistryAddress,
     rewardPolicyAddress: raw.rewardPolicyAddress,
     rewardDispatcherAddress: raw.rewardDispatcherAddress,
+    rewardPolicyDeployedAtBlock: raw.rewardPolicyDeployedAtBlock,
     agentConfig: {
       rpcUrl: raw.rpcUrl,
       chainId: raw.chainId,
