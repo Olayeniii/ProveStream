@@ -37,6 +37,27 @@ const List = styled.ul`
   flex-direction: column;
 `;
 
+const Dot = styled.span<{ $status: StreamNode['status'] }>`
+  position: relative;
+  margin-top: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: ${(props) =>
+    props.$status === 'failed' ? props.theme.colors.error : props.theme.colors.primary};
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 8px;
+    bottom: -22px;
+    left: 3px;
+    width: 2px;
+    background: ${(props) => props.theme.colors.border};
+  }
+`;
+
 const Item = styled.li`
   display: flex;
   align-items: flex-start;
@@ -47,20 +68,15 @@ const Item = styled.li`
   &:last-child {
     border-bottom: none;
   }
-`;
 
-const Dot = styled.span<{ $status: StreamNode['status'] }>`
-  margin-top: 4px;
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  flex-shrink: 0;
-  background: ${(props) =>
-    props.$status === 'failed' ? props.theme.colors.error : props.theme.colors.primary};
+  &:last-child ${Dot}::after {
+    display: none;
+  }
 `;
 
 const Body = styled.div`
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -75,12 +91,14 @@ const Label = styled.span`
 const Detail = styled.span`
   font-size: 0.78rem;
   color: ${(props) => props.theme.colors.textMuted};
+  overflow-wrap: anywhere;
 `;
 
 const Time = styled.span`
   font-size: 0.75rem;
   color: ${(props) => props.theme.colors.textMuted};
   white-space: nowrap;
+  flex-shrink: 0;
 `;
 
 const Empty = styled.p`

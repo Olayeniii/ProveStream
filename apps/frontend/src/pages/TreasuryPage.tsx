@@ -5,7 +5,7 @@ import styled from 'styled-components';
 import { AppShell } from '../components/AppShell.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, TreasuryBalance } from '../lib/api.js';
-import { formatAmount } from '../lib/format.js';
+import { formatAmount, formatReward } from '../lib/format.js';
 
 export function TreasuryPage({ env, api }: { env: AppEnv; api: ApiClient }) {
   const [treasury, setTreasury] = useState<TreasuryBalance | undefined>(undefined);
@@ -41,7 +41,7 @@ export function TreasuryPage({ env, api }: { env: AppEnv; api: ApiClient }) {
               <ListItem key={payment.rewardId}>
                 <span>Reward #{payment.rewardId}</span>
                 <StatusBadge status={payment.status}>{payment.status}</StatusBadge>
-                <span>{payment.rewardAmount} (raw units)</span>
+                <span>{formatReward(payment.rewardAmount)}</span>
                 <span>Supplier {payment.supplier}</span>
               </ListItem>
             ))}

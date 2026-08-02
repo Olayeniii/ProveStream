@@ -7,6 +7,7 @@ import styled from 'styled-components';
 import { AppShell } from '../components/AppShell.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, PolicySummary } from '../lib/api.js';
+import { formatReward } from '../lib/format.js';
 import { connectWallet, getPublicClient } from '../lib/clients.js';
 
 export function PoliciesPage({ env, api }: { env: AppEnv; api: ApiClient }) {
@@ -92,7 +93,7 @@ export function PoliciesPage({ env, api }: { env: AppEnv; api: ApiClient }) {
               <ListItem key={policy.id}>
                 <span>#{policy.id}</span>
                 <span>{policy.credentialType}</span>
-                <span>{policy.rewardAmount} (raw units)</span>
+                <span>{formatReward(policy.rewardAmount)}</span>
                 <StatusBadge $enabled={policy.enabled}>
                   {policy.enabled ? 'enabled' : 'disabled'}
                 </StatusBadge>

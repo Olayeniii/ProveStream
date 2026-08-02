@@ -95,6 +95,8 @@ export function AppShell({
           ))}
         </Nav>
 
+        <Spacer />
+
         <Widgets>
           <Widget>
             <WidgetLabel>Total Rewards Paid</WidgetLabel>
@@ -114,6 +116,8 @@ export function AppShell({
             </TreasuryIcon>
           </Widget>
         </Widgets>
+
+        <Spacer />
 
         <Footer>
           Powered by
@@ -214,8 +218,11 @@ const StyledNavLink = styled(NavLink)`
   }
 `;
 
+const Spacer = styled.div`
+  flex: 1;
+`;
+
 const Widgets = styled.div`
-  margin-top: 32px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -262,7 +269,6 @@ const TreasuryIcon = styled.div`
 `;
 
 const Footer = styled.div`
-  margin-top: 32px;
   display: flex;
   align-items: center;
   gap: 6px;
