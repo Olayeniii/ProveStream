@@ -26,8 +26,15 @@ type ChallengeOutcome = NonNullable<Parameters<ExecuteCallback>[1]>;
 /**
  * Promise wrapper around `W3SSdk.execute`. Resolves once the user completes
  * the challenge in Circle's PIN-entry UI (e.g. setting a PIN and creating a
- * wallet, or approving a transaction), rejects on error or a non-complete
- * terminal status.
+ * wallet, or approving a transaction), rejects on error or a genuinely
+ * terminal failure status.
+ *
+ * `execute`'s callback can fire more than once as the challenge progresses
+ * (e.g. an `IN_PROGRESS`/`PENDING` update before the real `COMPLETE`) — a
+ * Promise only settles once, so treating every non-`COMPLETE` status as a
+ * hard failure would reject on that first update and silently ignore the
+ * real completion that follows. Only `FAILED`/`EXPIRED` are terminal
+ * failures; anything else just keeps waiting for a later callback.
  */
 export function executeChallenge(sdk: W3SSdk, challengeId: string): Promise<ChallengeOutcome> {
   return new Promise((resolve, reject) => {
@@ -40,11 +47,17 @@ export function executeChallenge(sdk: W3SSdk, challengeId: string): Promise<Chal
         reject(new Error('Challenge completed with no result.'));
         return;
       }
-      if ((result.status as string) !== 'COMPLETE') {
-        reject(new Error(`Challenge ended with status ${result.status as string}.`));
+
+      const status = result.status as string;
+      if (status === 'COMPLETE') {
+        resolve(result);
         return;
       }
-      resolve(result);
+      if (status === 'FAILED' || status === 'EXPIRED') {
+        reject(new Error(`Challenge ended with status ${status}.`));
+        return;
+      }
+      // PENDING / IN_PROGRESS: not terminal — wait for a later callback.
     });
   });
 }
