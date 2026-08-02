@@ -1,4 +1,4 @@
-import type { Payment } from '@provenance-streams/protocol';
+import type { Payment, RiskAnalysis } from '@provenance-streams/protocol';
 import { useEffect, useMemo, useState } from 'react';
 import { formatEther } from 'viem';
 import styled from 'styled-components';
@@ -19,6 +19,7 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
   const [attestations, setAttestations] = useState<AttestationRecord[]>([]);
   const [policies, setPolicies] = useState<PolicySummary[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [riskAnalyses, setRiskAnalyses] = useState<RiskAnalysis[]>([]);
 
   useEffect(() => {
     if (wallet.status !== 'ready' || !wallet.walletAddress) {
@@ -43,6 +44,10 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
       .listPayments()
       .then(setPayments)
       .catch(() => undefined);
+    api
+      .listRiskAnalyses()
+      .then(setRiskAnalyses)
+      .catch(() => undefined);
   }, [api, env, wallet.status, wallet.walletAddress]);
 
   const myStreams = useMemo(() => {
@@ -52,8 +57,8 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
     const mine = attestations.filter(
       (attestation) => attestation.supplier.toLowerCase() === wallet.walletAddress?.toLowerCase(),
     );
-    return buildStreams(mine, policies, payments);
-  }, [attestations, policies, payments, wallet.walletAddress]);
+    return buildStreams(mine, policies, payments, riskAnalyses);
+  }, [attestations, policies, payments, riskAnalyses, wallet.walletAddress]);
 
   return (
     <AppShell

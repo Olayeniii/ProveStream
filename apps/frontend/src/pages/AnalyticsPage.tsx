@@ -1,4 +1,4 @@
-import type { Payment } from '@provenance-streams/protocol';
+import type { Payment, RiskAnalysis } from '@provenance-streams/protocol';
 import { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 import { formatUnits } from 'viem';
@@ -24,6 +24,7 @@ export function AnalyticsPage({ env, api }: { env: AppEnv; api: ApiClient }) {
   const [attestations, setAttestations] = useState<AttestationRecord[]>([]);
   const [policies, setPolicies] = useState<PolicySummary[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [riskAnalyses, setRiskAnalyses] = useState<RiskAnalysis[]>([]);
 
   useEffect(() => {
     api
@@ -38,11 +39,15 @@ export function AnalyticsPage({ env, api }: { env: AppEnv; api: ApiClient }) {
       .listPayments()
       .then(setPayments)
       .catch(() => undefined);
+    api
+      .listRiskAnalyses()
+      .then(setRiskAnalyses)
+      .catch(() => undefined);
   }, [api]);
 
   const streams = useMemo(
-    () => buildStreams(attestations, policies, payments),
-    [attestations, policies, payments],
+    () => buildStreams(attestations, policies, payments, riskAnalyses),
+    [attestations, policies, payments, riskAnalyses],
   );
 
   const statusCounts = useMemo(() => {

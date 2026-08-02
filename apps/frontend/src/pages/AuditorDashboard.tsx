@@ -13,7 +13,7 @@ import type { AppEnv } from '../env.js';
 import { useEmbeddedWallet } from '../hooks/useEmbeddedWallet.js';
 import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
 import { buildStreams } from '../lib/streams.js';
-import type { Payment } from '@provenance-streams/protocol';
+import type { Payment, RiskAnalysis } from '@provenance-streams/protocol';
 
 export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
   const wallet = useEmbeddedWallet('auditor', api);
@@ -21,6 +21,7 @@ export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) 
   const [attestations, setAttestations] = useState<AttestationRecord[]>([]);
   const [policies, setPolicies] = useState<PolicySummary[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [riskAnalyses, setRiskAnalyses] = useState<RiskAnalysis[]>([]);
 
   useEffect(() => {
     if (wallet.status !== 'ready') {
@@ -37,6 +38,10 @@ export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) 
     api
       .listPayments()
       .then(setPayments)
+      .catch(() => undefined);
+    api
+      .listRiskAnalyses()
+      .then(setRiskAnalyses)
       .catch(() => undefined);
   }, [api, wallet.status, status.state]);
 
@@ -68,8 +73,8 @@ export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) 
     const mine = attestations.filter(
       (attestation) => attestation.auditor.toLowerCase() === wallet.walletAddress?.toLowerCase(),
     );
-    return buildStreams(mine, policies, payments);
-  }, [attestations, policies, payments, wallet.walletAddress]);
+    return buildStreams(mine, policies, payments, riskAnalyses);
+  }, [attestations, policies, payments, riskAnalyses, wallet.walletAddress]);
 
   return (
     <AppShell
