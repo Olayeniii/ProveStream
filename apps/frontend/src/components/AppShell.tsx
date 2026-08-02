@@ -1,18 +1,24 @@
+import { arcTestnet, hardhatLocal } from '@provenance-streams/protocol';
 import {
   Activity,
   BarChart3,
+  Bell,
+  ChevronDown,
   FileText,
   Landmark,
   ShieldCheck,
   Settings,
   Truck,
+  Wallet,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import styled from 'styled-components';
+import { formatUnits } from 'viem';
 
 import logo from '../assets/logo.png';
+import type { AppEnv } from '../env.js';
 import type { ApiClient } from '../lib/api.js';
 
 const NAV_ITEMS = [
@@ -25,20 +31,32 @@ const NAV_ITEMS = [
   { to: '/admin', label: 'Admin', icon: Settings },
 ];
 
+function networkLabel(chainId: number): string {
+  if (chainId === arcTestnet.id) {
+    return 'Arc Testnet';
+  }
+  if (chainId === hardhatLocal.id) {
+    return 'Hardhat Local';
+  }
+  return `Chain ${chainId}`;
+}
+
 export function AppShell({
   title,
   subtitle,
   headerActions,
+  env,
   api,
   children,
 }: {
   title: string;
   subtitle?: string;
   headerActions?: ReactNode;
+  env: AppEnv;
   api: ApiClient;
   children: ReactNode;
 }) {
-  const [totalRewardsPaid, setTotalRewardsPaid] = useState<number | undefined>(undefined);
+  const [totalRewardsPaid, setTotalRewardsPaid] = useState<string | undefined>(undefined);
   const [streamCount, setStreamCount] = useState<number | undefined>(undefined);
   const [treasuryLabel, setTreasuryLabel] = useState<string | undefined>(undefined);
 
@@ -47,9 +65,8 @@ export function AppShell({
       .listPayments()
       .then((payments) => {
         const complete = payments.filter((payment) => payment.status === 'complete');
-        setTotalRewardsPaid(
-          complete.reduce((sum, payment) => sum + Number(payment.rewardAmount), 0),
-        );
+        const total = complete.reduce((sum, payment) => sum + BigInt(payment.rewardAmount), 0n);
+        setTotalRewardsPaid(formatUnits(total, 18));
         setStreamCount(payments.length);
       })
       .catch(() => undefined);
@@ -81,7 +98,7 @@ export function AppShell({
           <Widget>
             <WidgetLabel>Total Rewards Paid</WidgetLabel>
             <WidgetValue>
-              {totalRewardsPaid !== undefined ? `${totalRewardsPaid.toFixed(2)} USDC` : '—'}
+              {totalRewardsPaid !== undefined ? `${totalRewardsPaid} USDC` : '—'}
             </WidgetValue>
             <WidgetCaption>
               {streamCount !== undefined ? `Across ${streamCount} streams` : 'Loading…'}
@@ -91,6 +108,9 @@ export function AppShell({
             <WidgetLabel>Treasury Balance</WidgetLabel>
             <WidgetValue>{treasuryLabel ?? '—'}</WidgetValue>
             <WidgetCaption>Developer Controlled Wallet</WidgetCaption>
+            <TreasuryIcon>
+              <Wallet size={16} />
+            </TreasuryIcon>
           </Widget>
         </Widgets>
 
@@ -103,7 +123,16 @@ export function AppShell({
             <Title>{title}</Title>
             {subtitle && <Subtitle>{subtitle}</Subtitle>}
           </div>
-          {headerActions && <HeaderActions>{headerActions}</HeaderActions>}
+          <HeaderActions>
+            <NetworkChip>
+              {networkLabel(env.chainId)}
+              <ChevronDown size={14} />
+            </NetworkChip>
+            {headerActions}
+            <BellButton type="button" aria-label="Notifications">
+              <Bell size={18} />
+            </BellButton>
+          </HeaderActions>
         </Header>
         <Content>{children}</Content>
       </Main>
@@ -212,6 +241,18 @@ const WidgetCaption = styled.span`
   color: ${(props) => props.theme.colors.textMuted};
 `;
 
+const TreasuryIcon = styled.div`
+  margin: 8px auto 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: ${(props) => props.theme.colors.primary}1a;
+  color: ${(props) => props.theme.colors.primary};
+`;
+
 const Footer = styled.div`
   padding: 0 8px;
   font-size: 0.75rem;
@@ -252,6 +293,37 @@ const HeaderActions = styled.div`
   display: flex;
   align-items: center;
   gap: 12px;
+`;
+
+const NetworkChip = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: ${(props) => props.theme.radius.pill};
+  border: 1px solid ${(props) => props.theme.colors.border};
+  background: ${(props) => props.theme.colors.surface};
+  color: ${(props) => props.theme.colors.text};
+  font-size: 0.82rem;
+  font-weight: 500;
+  white-space: nowrap;
+`;
+
+const BellButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid ${(props) => props.theme.colors.border};
+  background: ${(props) => props.theme.colors.surface};
+  color: ${(props) => props.theme.colors.textMuted};
+  cursor: pointer;
+
+  &:hover {
+    color: ${(props) => props.theme.colors.primary};
+  }
 `;
 
 const Content = styled.div`

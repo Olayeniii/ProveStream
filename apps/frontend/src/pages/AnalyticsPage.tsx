@@ -1,6 +1,7 @@
 import type { Payment } from '@provenance-streams/protocol';
 import { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
+import { formatUnits } from 'viem';
 
 import { AppShell } from '../components/AppShell.js';
 import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
@@ -52,9 +53,12 @@ export function AnalyticsPage({ api }: { api: ApiClient }) {
 
   const totalRewardsPaid = useMemo(
     () =>
-      payments
-        .filter((payment) => payment.status === 'complete')
-        .reduce((sum, payment) => sum + Number(payment.rewardAmount), 0),
+      formatUnits(
+        payments
+          .filter((payment) => payment.status === 'complete')
+          .reduce((sum, payment) => sum + BigInt(payment.rewardAmount), 0n),
+        18,
+      ),
     [payments],
   );
 
@@ -88,7 +92,7 @@ export function AnalyticsPage({ api }: { api: ApiClient }) {
         </StatCard>
         <StatCard>
           <StatLabel>Total Rewards Paid</StatLabel>
-          <StatValue>{totalRewardsPaid.toFixed(2)} USDC</StatValue>
+          <StatValue>{totalRewardsPaid} USDC</StatValue>
         </StatCard>
         <StatCard>
           <StatLabel>Avg. Attestation → Paid</StatLabel>

@@ -1,11 +1,24 @@
-import { LogOut, Wallet } from 'lucide-react';
+import { LogOut, User } from 'lucide-react';
 import styled from 'styled-components';
 
-export function WalletChip({ address, onSignOut }: { address: string; onSignOut: () => void }) {
+export function WalletChip({
+  address,
+  role,
+  onSignOut,
+}: {
+  address: string;
+  role: string;
+  onSignOut: () => void;
+}) {
   return (
     <Chip>
-      <Wallet size={16} />
-      <Address>{`${address.slice(0, 6)}…${address.slice(-4)}`}</Address>
+      <Avatar>
+        <User size={16} />
+      </Avatar>
+      <TextColumn>
+        <Address>{`${address.slice(0, 6)}…${address.slice(-4)}`}</Address>
+        <Role>{role}</Role>
+      </TextColumn>
       <SignOutButton type="button" onClick={onSignOut} aria-label="Sign out">
         <LogOut size={14} />
       </SignOutButton>
@@ -16,17 +29,41 @@ export function WalletChip({ address, onSignOut }: { address: string; onSignOut:
 const Chip = styled.div`
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 10px;
+  padding: 6px 12px 6px 6px;
   border-radius: ${(props) => props.theme.radius.pill};
   border: 1px solid ${(props) => props.theme.colors.border};
   background: ${(props) => props.theme.colors.surfaceMuted};
   color: ${(props) => props.theme.colors.text};
-  font-size: 0.85rem;
+`;
+
+const Avatar = styled.div`
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: ${(props) => props.theme.colors.violet}1a;
+  color: ${(props) => props.theme.colors.violet};
+`;
+
+const TextColumn = styled.div`
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
 `;
 
 const Address = styled.span`
   font-family: ${(props) => props.theme.monoFontFamily};
+  font-size: 0.82rem;
+  font-weight: 600;
+`;
+
+const Role = styled.span`
+  font-size: 0.72rem;
+  color: ${(props) => props.theme.colors.textMuted};
 `;
 
 const SignOutButton = styled.button`
