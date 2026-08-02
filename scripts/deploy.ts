@@ -1,14 +1,23 @@
 import { network } from 'hardhat';
 
-import AttestationRegistryModule from '../ignition/modules/AttestationRegistry.js';
+import ProtocolModule from '../ignition/modules/Protocol.js';
 
 async function main() {
   const { ignition } = await network.connect();
 
-  const { attestationRegistry } = await ignition.deploy(AttestationRegistryModule);
+  const { attestationRegistry, rewardPolicy, rewardDispatcher } =
+    await ignition.deploy(ProtocolModule);
 
   console.log('AttestationRegistry deployed to:', attestationRegistry.address);
-  console.log('Set CONTRACT_ADDRESS / VITE_CONTRACT_ADDRESS in your .env to this value.');
+  console.log('RewardPolicy deployed to:', rewardPolicy.address);
+  console.log('RewardDispatcher deployed to:', rewardDispatcher.address);
+  console.log('\nUpdate .env with:');
+  console.log(`  CONTRACT_ADDRESS=${attestationRegistry.address}`);
+  console.log(`  VITE_CONTRACT_ADDRESS=${attestationRegistry.address}`);
+  console.log(`  REWARD_POLICY_ADDRESS=${rewardPolicy.address}`);
+  console.log(`  VITE_REWARD_POLICY_ADDRESS=${rewardPolicy.address}`);
+  console.log(`  REWARD_DISPATCHER_ADDRESS=${rewardDispatcher.address}`);
+  console.log(`  VITE_REWARD_DISPATCHER_ADDRESS=${rewardDispatcher.address}`);
 }
 
 main().catch((error: unknown) => {

@@ -130,9 +130,9 @@ const Label = styled.label`
 
 const Input = styled.input`
   padding: 12px 14px;
-  border-radius: ${(props) => props.theme.radius};
+  border-radius: ${(props) => props.theme.radius.card};
   border: 1px solid ${(props) => props.theme.colors.border};
-  background: ${(props) => props.theme.colors.background};
+  background: ${(props) => props.theme.colors.surfaceMuted};
   color: ${(props) => props.theme.colors.text};
   font-size: 1rem;
   font-family: inherit;
@@ -160,7 +160,7 @@ const ErrorText = styled.span`
 const SubmitButton = styled.button`
   margin-top: 8px;
   padding: 14px;
-  border-radius: ${(props) => props.theme.radius};
+  border-radius: ${(props) => props.theme.radius.pill};
   border: none;
   background: ${(props) => props.theme.colors.primary};
   color: ${(props) => props.theme.colors.primaryText};

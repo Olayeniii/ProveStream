@@ -11,6 +11,16 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@provenance-streams/agent": "*"
+    "@circle-fin/user-controlled-wallets": "10.8.0",
+    "@provenance-streams/agent": "*",
+    "@provenance-streams/protocol": "*",
+    "cors": "2.8.6",
+    "express": "5.2.1",
+    "viem": "2.55.8",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/cors": "2.8.19",
+    "@types/express": "5.0.6"
   }
 }

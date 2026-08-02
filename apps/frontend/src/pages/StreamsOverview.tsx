@@ -1,0 +1,164 @@
+import { useEffect, useMemo, useState } from 'react';
+import styled from 'styled-components';
+
+import { AppShell } from '../components/AppShell.js';
+import { PipelineView } from '../components/pipeline/PipelineView.js';
+import { RewardDetailsPanel } from '../components/pipeline/RewardDetailsPanel.js';
+import { RiskAnalysisPanel } from '../components/pipeline/RiskAnalysisPanel.js';
+import { StreamActionsPanel } from '../components/pipeline/StreamActionsPanel.js';
+import { StreamCard } from '../components/pipeline/StreamCard.js';
+import { StreamTimeline } from '../components/pipeline/StreamTimeline.js';
+import type { AppEnv } from '../env.js';
+import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
+import { buildStreams } from '../lib/streams.js';
+import type { Payment } from '@provenance-streams/protocol';
+
+export function StreamsOverview({ env, api }: { env: AppEnv; api: ApiClient }) {
+  const [attestations, setAttestations] = useState<AttestationRecord[]>([]);
+  const [policies, setPolicies] = useState<PolicySummary[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    api
+      .listAttestations()
+      .then(setAttestations)
+      .catch(() => undefined);
+    api
+      .listPolicies()
+      .then(setPolicies)
+      .catch(() => undefined);
+    api
+      .listPayments()
+      .then(setPayments)
+      .catch(() => undefined);
+  }, [api]);
+
+  const streams = useMemo(
+    () => buildStreams(attestations, policies, payments),
+    [attestations, policies, payments],
+  );
+
+  const selected = streams.find((stream) => stream.id === selectedId) ?? streams[0];
+
+  return (
+    <AppShell title="Streams" subtitle="Following the journey from attestation to reward" api={api}>
+      {streams.length === 0 ? (
+        <Empty>No streams yet. Submit an attestation from the Auditor page to start one.</Empty>
+      ) : (
+        <>
+          {selected && (
+            <DetailCard>
+              <DetailHeader>
+                <DetailTitle>Attestation #{selected.id}</DetailTitle>
+              </DetailHeader>
+              <PipelineView nodes={selected.nodes} />
+            </DetailCard>
+          )}
+
+          {selected && (
+            <DetailGrid>
+              <TimelineCard>
+                <PanelTitle>Stream Timeline</PanelTitle>
+                <StreamTimeline nodes={selected.nodes} />
+              </TimelineCard>
+              <SidePanels>
+                <RewardDetailsPanel stream={selected} />
+                <RiskAnalysisPanel />
+                <StreamActionsPanel stream={selected} env={env} />
+              </SidePanels>
+            </DetailGrid>
+          )}
+
+          <Section>
+            <SectionTitle>Recent Streams</SectionTitle>
+            <Grid>
+              {streams.map((stream) => (
+                <StreamCard
+                  key={stream.id}
+                  stream={stream}
+                  selected={stream.id === selected?.id}
+                  onClick={() => setSelectedId(stream.id)}
+                />
+              ))}
+            </Grid>
+          </Section>
+        </>
+      )}
+    </AppShell>
+  );
+}
+
+const Empty = styled.p`
+  color: ${(props) => props.theme.colors.textMuted};
+`;
+
+const DetailCard = styled.div`
+  padding: 24px;
+  border-radius: ${(props) => props.theme.radius.card};
+  border: 1px solid ${(props) => props.theme.colors.border};
+  background: ${(props) => props.theme.colors.surface};
+`;
+
+const DetailHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+`;
+
+const DetailTitle = styled.h2`
+  margin: 0;
+  font-size: 1.15rem;
+  color: ${(props) => props.theme.colors.text};
+`;
+
+const DetailGrid = styled.div`
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+
+  @media (max-width: 1100px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const TimelineCard = styled.div`
+  padding: 24px;
+  border-radius: ${(props) => props.theme.radius.card};
+  border: 1px solid ${(props) => props.theme.colors.border};
+  background: ${(props) => props.theme.colors.surface};
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+`;
+
+const PanelTitle = styled.h3`
+  margin: 0;
+  font-size: 1rem;
+  color: ${(props) => props.theme.colors.text};
+`;
+
+const SidePanels = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+`;
+
+const Section = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+`;
+
+const SectionTitle = styled.h3`
+  margin: 0;
+  font-size: 1rem;
+  color: ${(props) => props.theme.colors.text};
+`;
+
+const Grid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+`;

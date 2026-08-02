@@ -14,5 +14,18 @@ export const GlobalStyle = createGlobalStyle`
     background: ${(props) => props.theme.colors.background};
     color: ${(props) => props.theme.colors.text};
     font-family: ${(props) => props.theme.fontFamily};
+    -webkit-font-smoothing: antialiased;
+  }
+
+  code, pre {
+    font-family: ${(props) => props.theme.monoFontFamily};
+  }
+
+  a {
+    color: inherit;
+  }
+
+  button {
+    font-family: inherit;
   }
 `;

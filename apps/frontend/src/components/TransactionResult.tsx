@@ -35,7 +35,7 @@ export function TransactionResult({ status }: { status: SubmissionStatus }) {
 const Box = styled.div`
   margin-top: 24px;
   padding: 16px;
-  border-radius: ${(props) => props.theme.radius};
+  border-radius: ${(props) => props.theme.radius.card};
   border: 1px solid ${(props) => props.theme.colors.border};
   display: flex;
   flex-direction: column;

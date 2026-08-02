@@ -17,4 +17,5 @@ ignition/deployments/
 .vscode/*
 !.vscode/extensions.json
 
-provenance-streams-milestone-1.md
+Documents/
+dashboardview.png

@@ -1,19 +1,16 @@
-import { attestationRegistryAbi, hardhatLocal } from '@provenance-streams/protocol';
+import { attestationRegistryAbi } from '@provenance-streams/protocol';
 import type { Address } from 'viem';
-import { createPublicClient, http } from 'viem';
 
 import type { AttestationSubmittedEventArgs } from '@provenance-streams/protocol';
 
-export interface WatcherConfig {
-  rpcUrl: string;
-  contractAddress: Address;
-  chainId: number;
+import { createAgentPublicClient } from './chainClient.js';
+import type { ChainConfig, StopWatcher } from './chainClient.js';
+
+export interface WatcherConfig extends ChainConfig {
+  attestationRegistryAddress: Address;
 }
 
 export type AttestationSubmittedHandler = (args: AttestationSubmittedEventArgs) => void;
-
-/** Stops the underlying event subscription. */
-export type StopWatcher = () => void;
 
 /**
  * Subscribes to `AttestationSubmitted` events emitted by the deployed
@@ -23,13 +20,10 @@ export function watchAttestations(
   config: WatcherConfig,
   onAttestationSubmitted: AttestationSubmittedHandler,
 ): StopWatcher {
-  const client = createPublicClient({
-    chain: { ...hardhatLocal, id: config.chainId },
-    transport: http(config.rpcUrl),
-  });
+  const client = createAgentPublicClient(config);
 
   return client.watchContractEvent({
-    address: config.contractAddress,
+    address: config.attestationRegistryAddress,
     abi: attestationRegistryAbi,
     eventName: 'AttestationSubmitted',
     onLogs: (logs) => {

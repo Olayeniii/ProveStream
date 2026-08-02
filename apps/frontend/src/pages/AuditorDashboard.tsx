@@ -1,0 +1,150 @@
+import { useEffect, useMemo, useState } from 'react';
+import styled from 'styled-components';
+
+import type { AttestationFormValues } from '../components/AttestationForm.js';
+import { AttestationForm } from '../components/AttestationForm.js';
+import { AppShell } from '../components/AppShell.js';
+import { EmbeddedWalletLogin } from '../components/EmbeddedWalletLogin.js';
+import { StreamCard } from '../components/pipeline/StreamCard.js';
+import type { SubmissionStatus } from '../components/TransactionResult.js';
+import { TransactionResult } from '../components/TransactionResult.js';
+import { WalletChip } from '../components/WalletChip.js';
+import { useEmbeddedWallet } from '../hooks/useEmbeddedWallet.js';
+import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
+import { buildStreams } from '../lib/streams.js';
+import type { Payment } from '@provenance-streams/protocol';
+
+export function AuditorDashboard({ api }: { api: ApiClient }) {
+  const wallet = useEmbeddedWallet('auditor', api);
+  const [status, setStatus] = useState<SubmissionStatus>({ state: 'idle' });
+  const [attestations, setAttestations] = useState<AttestationRecord[]>([]);
+  const [policies, setPolicies] = useState<PolicySummary[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+
+  useEffect(() => {
+    if (wallet.status !== 'ready') {
+      return;
+    }
+    api
+      .listAttestations()
+      .then(setAttestations)
+      .catch(() => undefined);
+    api
+      .listPolicies()
+      .then(setPolicies)
+      .catch(() => undefined);
+    api
+      .listPayments()
+      .then(setPayments)
+      .catch(() => undefined);
+  }, [api, wallet.status, status.state]);
+
+  async function handleSubmit(values: AttestationFormValues) {
+    setStatus({ state: 'pending' });
+    try {
+      const { txHash } = await wallet.submitAttestation({
+        supplier: values.supplier,
+        proofHash: values.proofHash,
+        policyId: values.policyId.toString(),
+      });
+      setStatus({ state: 'success', hash: txHash as `0x${string}` });
+    } catch (error) {
+      setStatus({
+        state: 'error',
+        message: error instanceof Error ? error.message : 'Failed to submit attestation.',
+      });
+    }
+  }
+
+  const myStreams = useMemo(() => {
+    if (!wallet.walletAddress) {
+      return [];
+    }
+    const mine = attestations.filter(
+      (attestation) => attestation.auditor.toLowerCase() === wallet.walletAddress?.toLowerCase(),
+    );
+    return buildStreams(mine, policies, payments);
+  }, [attestations, policies, payments, wallet.walletAddress]);
+
+  return (
+    <AppShell
+      title="Auditor"
+      subtitle="Submit attestations and track their streams"
+      api={api}
+      headerActions={
+        wallet.status === 'ready' && wallet.walletAddress ? (
+          <WalletChip address={wallet.walletAddress} onSignOut={wallet.logout} />
+        ) : undefined
+      }
+    >
+      {wallet.status !== 'ready' && (
+        <Card>
+          <SectionTitle>Sign in</SectionTitle>
+          <EmbeddedWalletLogin wallet={wallet} />
+        </Card>
+      )}
+
+      {wallet.status === 'ready' && (
+        <Card>
+          <SectionTitle>Submit an attestation</SectionTitle>
+          <AttestationForm
+            submitting={status.state === 'pending'}
+            onSubmit={(values) => {
+              void handleSubmit(values);
+            }}
+          />
+          <TransactionResult status={status} />
+        </Card>
+      )}
+
+      {wallet.status === 'ready' && (
+        <Section>
+          <SectionTitle>Your streams</SectionTitle>
+          {myStreams.length === 0 ? (
+            <Empty>No attestations submitted yet.</Empty>
+          ) : (
+            <Grid>
+              {myStreams.map((stream) => (
+                <StreamCard key={stream.id} stream={stream} />
+              ))}
+            </Grid>
+          )}
+        </Section>
+      )}
+    </AppShell>
+  );
+}
+
+const Card = styled.div`
+  background: ${(props) => props.theme.colors.surface};
+  border: 1px solid ${(props) => props.theme.colors.border};
+  border-radius: ${(props) => props.theme.radius.card};
+  padding: ${(props) => props.theme.spacing.cardPadding};
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+`;
+
+const Section = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+`;
+
+const SectionTitle = styled.h2`
+  margin: 0;
+  font-size: 1rem;
+  color: ${(props) => props.theme.colors.text};
+`;
+
+const Empty = styled.p`
+  margin: 0;
+  color: ${(props) => props.theme.colors.textMuted};
+  font-size: 0.9rem;
+`;
+
+const Grid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+`;

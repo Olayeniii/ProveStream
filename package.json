@@ -27,6 +27,9 @@
     "test": "hardhat test && npm run test --workspaces --if-present",
     "typecheck": "tsc -p tsconfig.json && npm run typecheck --workspaces --if-present"
   },
+  "dependencies": {
+    "@openzeppelin/contracts": "5.6.1"
+  },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@nomicfoundation/hardhat-toolbox-viem": "5.0.7",
