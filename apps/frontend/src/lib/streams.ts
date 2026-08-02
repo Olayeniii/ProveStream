@@ -1,4 +1,4 @@
-import type { Payment } from '@provenance-streams/protocol';
+import type { Payment, RiskAnalysis } from '@provenance-streams/protocol';
 
 import type { AttestationRecord, PolicySummary } from './api.js';
 
@@ -48,34 +48,41 @@ export function getOverallStatus(stream: Stream): { label: string; tone: StreamT
 }
 
 /**
- * Merges the three independent read models the backend already exposes
- * (attestations, policies, payments) into one "stream" per attestation, with
- * a status per pipeline node.
+ * Merges the four independent read models the backend already exposes
+ * (attestations, policies, payments, risk analyses) into one "stream" per
+ * attestation, with a status per pipeline node.
  *
- * Two nodes from the design mock — Signature Verified and AI Risk Analysis —
- * have no backing data anywhere in the system (no separate signature-check
- * step is recorded, and there's no fraud-scoring service). They're kept as
- * visual slots so the pipeline shape matches the design system, but always
- * report `unavailable` rather than inventing a score.
+ * One node from the design mock — Signature Verified — has no backing data
+ * anywhere in the system (no separate signature-check step is recorded). It's
+ * kept as a visual slot so the pipeline shape matches the design system, but
+ * always reports `unavailable` rather than inventing a value. AI Risk
+ * Analysis, by contrast, is real once `GEMINI_API_KEY` is configured on the
+ * backend — see `riskAnalysisService.ts`; it falls back to the same honest
+ * `unavailable` state when no risk-analysis record exists for a stream.
  */
 export function buildStreams(
   attestations: AttestationRecord[],
   policies: PolicySummary[],
   payments: Payment[],
+  riskAnalyses: RiskAnalysis[] = [],
 ): Stream[] {
   const policiesById = new Map(policies.map((policy) => [policy.id, policy]));
   const paymentsByAttestationId = new Map(payments.map((payment) => [payment.attestationId, payment]));
+  const riskAnalysesByAttestationId = new Map(
+    riskAnalyses.map((analysis) => [analysis.attestationId, analysis]),
+  );
 
   return attestations.map((attestation) => {
     const policy = policiesById.get(attestation.policyId);
     const payment = paymentsByAttestationId.get(attestation.id);
+    const riskAnalysis = riskAnalysesByAttestationId.get(attestation.id);
 
     return {
       id: attestation.id,
       attestation,
       policy,
       payment,
-      nodes: buildNodes(attestation, policy, payment),
+      nodes: buildNodes(attestation, policy, payment, riskAnalysis),
     };
   });
 }
@@ -84,6 +91,7 @@ function buildNodes(
   attestation: AttestationRecord,
   policy: PolicySummary | undefined,
   payment: Payment | undefined,
+  riskAnalysis: RiskAnalysis | undefined,
 ): StreamNode[] {
   const settlementStatus: NodeStatus =
     payment?.status === 'complete'
@@ -118,12 +126,7 @@ function buildNodes(
       timestamp: policy ? attestation.observedAt : undefined,
       detail: policy ? policy.credentialType : 'Policy not found',
     },
-    {
-      key: 'ai-risk-analysis',
-      label: 'AI Risk Analysis',
-      status: 'unavailable',
-      detail: 'No fraud-scoring service configured yet',
-    },
+    buildRiskAnalysisNode(riskAnalysis),
     {
       key: 'treasury-approved',
       label: 'Treasury Approved',
@@ -153,4 +156,44 @@ function buildNodes(
       detail: payment?.txHash ?? (paidStatus === 'complete' ? 'Paid' : 'Reward Ready'),
     },
   ];
+}
+
+function buildRiskAnalysisNode(riskAnalysis: RiskAnalysis | undefined): StreamNode {
+  if (!riskAnalysis) {
+    return {
+      key: 'ai-risk-analysis',
+      label: 'AI Risk Analysis',
+      status: 'unavailable',
+      detail: 'No fraud-scoring service configured yet',
+    };
+  }
+
+  if (riskAnalysis.status === 'pending') {
+    return {
+      key: 'ai-risk-analysis',
+      label: 'AI Risk Analysis',
+      status: 'active',
+      detail: 'Analyzing submitted evidence…',
+    };
+  }
+
+  if (riskAnalysis.status === 'failed') {
+    return {
+      key: 'ai-risk-analysis',
+      label: 'AI Risk Analysis',
+      status: 'failed',
+      timestamp: riskAnalysis.updatedAt,
+      detail: riskAnalysis.error ?? 'Risk analysis failed',
+    };
+  }
+
+  return {
+    key: 'ai-risk-analysis',
+    label: 'AI Risk Analysis',
+    status: 'complete',
+    timestamp: riskAnalysis.updatedAt,
+    detail: riskAnalysis.summary,
+    score: riskAnalysis.score,
+    confidence: riskAnalysis.confidence,
+  };
 }

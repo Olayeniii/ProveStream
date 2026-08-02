@@ -1,6 +1,7 @@
 import { CircleDollarSign, FileText, Hash, Radio } from 'lucide-react';
 import styled from 'styled-components';
 
+import { UsdcIcon } from '../UsdcIcon.js';
 import { formatReward } from '../../lib/format.js';
 import type { Stream } from '../../lib/streams.js';
 import { getOverallStatus } from '../../lib/streams.js';
@@ -16,7 +17,15 @@ export function RewardMetricsStrip({ stream }: { stream: Stream }) {
         </IconBadge>
         <div>
           <CellLabel>Reward Amount</CellLabel>
-          <CellValue>{stream.payment ? formatReward(stream.payment.rewardAmount) : '—'}</CellValue>
+          <CellValue>
+            {stream.payment ? (
+              <>
+                <UsdcIcon /> {formatReward(stream.payment.rewardAmount)}
+              </>
+            ) : (
+              '—'
+            )}
+          </CellValue>
         </div>
       </Cell>
       <Cell>

@@ -4,6 +4,7 @@ import styled from 'styled-components';
 import { formatUnits } from 'viem';
 
 import { AppShell } from '../components/AppShell.js';
+import { UsdcIcon } from '../components/UsdcIcon.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
 import { formatAmount } from '../lib/format.js';
@@ -97,7 +98,9 @@ export function AnalyticsPage({ env, api }: { env: AppEnv; api: ApiClient }) {
         </StatCard>
         <StatCard>
           <StatLabel>Total Rewards Paid</StatLabel>
-          <StatValue>{totalRewardsPaid} USDC</StatValue>
+          <StatValue>
+            <UsdcIcon /> {totalRewardsPaid} USDC
+          </StatValue>
         </StatCard>
         <StatCard>
           <StatLabel>Avg. Attestation → Paid</StatLabel>

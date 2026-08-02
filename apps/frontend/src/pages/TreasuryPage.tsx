@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import styled from 'styled-components';
 
 import { AppShell } from '../components/AppShell.js';
+import { UsdcIcon } from '../components/UsdcIcon.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, TreasuryBalance } from '../lib/api.js';
 import { formatAmount, formatReward } from '../lib/format.js';
@@ -27,7 +28,13 @@ export function TreasuryPage({ env, api }: { env: AppEnv; api: ApiClient }) {
       <Card>
         <SectionTitle>Balance</SectionTitle>
         <BalanceValue>
-          {treasury ? `${formatAmount(treasury.amount, 4)} USDC` : 'Loading…'}
+          {treasury ? (
+            <>
+              <UsdcIcon /> {formatAmount(treasury.amount, 4)} USDC
+            </>
+          ) : (
+            'Loading…'
+          )}
         </BalanceValue>
       </Card>
 

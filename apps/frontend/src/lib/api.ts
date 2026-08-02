@@ -1,4 +1,4 @@
-import type { Payment } from '@provenance-streams/protocol';
+import type { Payment, RiskAnalysis } from '@provenance-streams/protocol';
 
 export interface TreasuryBalance {
   amount: string;
@@ -57,6 +57,13 @@ export function createApiClient(baseUrl: string) {
     listPolicies: () => request<PolicySummary[]>(baseUrl, '/api/policies'),
     listAttestations: () => request<AttestationRecord[]>(baseUrl, '/api/attestations'),
     listPayments: () => request<Payment[]>(baseUrl, '/api/payments'),
+    listRiskAnalyses: () => request<RiskAnalysis[]>(baseUrl, '/api/risk-analyses'),
+
+    submitEvidence: (input: { proofHash: string; evidenceText: string }) =>
+      request<{ ok: true }>(baseUrl, '/api/evidence', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
 
     createWalletSession: (userId: string) =>
       request<WalletSession>(baseUrl, '/api/wallet-sessions', {

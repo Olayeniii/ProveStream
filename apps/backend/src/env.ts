@@ -23,6 +23,8 @@ const serverConfigSchema = z.object({
   operatorPrivateKey: z.string().min(1),
   treasuryPrivateKey: z.string().optional(),
   circle: circleSchema.partial(),
+  geminiApiKey: z.string().optional(),
+  geminiModel: z.string().min(1).default('gemini-2.0-flash'),
 });
 
 export interface ServerConfig {
@@ -45,6 +47,8 @@ export interface ServerConfig {
         treasuryBlockchain: string;
       }
     | undefined;
+  /** Present only when `GEMINI_API_KEY` is configured for AI risk analysis. */
+  gemini: { apiKey: string; model: string } | undefined;
 }
 
 /**
@@ -71,6 +75,8 @@ export function loadServerConfig(): ServerConfig {
       treasuryWalletId: process.env.CIRCLE_TREASURY_WALLET_ID,
       treasuryBlockchain: process.env.CIRCLE_TREASURY_BLOCKCHAIN,
     },
+    geminiApiKey: process.env.GEMINI_API_KEY,
+    geminiModel: process.env.GEMINI_MODEL,
   });
 
   const circleParsed = circleSchema.safeParse(raw.circle);
@@ -113,6 +119,7 @@ export function loadServerConfig(): ServerConfig {
           treasuryBlockchain: circleParsed.data.treasuryBlockchain,
         }
       : undefined,
+    gemini: raw.geminiApiKey ? { apiKey: raw.geminiApiKey, model: raw.geminiModel } : undefined,
   };
 }
 

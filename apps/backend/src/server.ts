@@ -1,5 +1,5 @@
 import type { TreasuryService } from '@provenance-streams/agent';
-import { isAddress } from 'viem';
+import { isAddress, isHex } from 'viem';
 import cors from 'cors';
 import express from 'express';
 import type { Express } from 'express';
@@ -29,6 +29,10 @@ const attestationChallengeBodySchema = z.object({
   policyId: z.string().min(1),
 });
 const waitForTxHashBodySchema = z.object({ userToken: z.string().min(1) });
+const evidenceBodySchema = z.object({
+  proofHash: z.string().refine(isHex),
+  evidenceText: z.string().min(1),
+});
 
 /** Builds the Express app exposing the dashboards' read APIs and the embedded wallet bootstrap. */
 export function createServer(deps: ServerDependencies): Express {
@@ -60,6 +64,21 @@ export function createServer(deps: ServerDependencies): Express {
 
   app.get('/api/payments', (_req, res) => {
     res.json(deps.store.listPayments());
+  });
+
+  app.post('/api/evidence', (req, res) => {
+    const body = evidenceBodySchema.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: 'proofHash and evidenceText are required' });
+      return;
+    }
+
+    deps.store.addPendingEvidence(body.data.proofHash, body.data.evidenceText);
+    res.json({ ok: true });
+  });
+
+  app.get('/api/risk-analyses', (_req, res) => {
+    res.json(deps.store.listRiskAnalyses());
   });
 
   app.post('/api/wallet-sessions', (req, res, next) => {

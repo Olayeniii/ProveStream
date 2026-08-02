@@ -64,3 +64,26 @@ export interface Payment {
   createdAt: string;
   updatedAt: string;
 }
+
+/** Lifecycle status of an AI risk-analysis pass over an attestation's submitted evidence. */
+export type RiskAnalysisStatus = 'pending' | 'complete' | 'failed';
+
+/**
+ * The result of sending an attestation's submitted evidence text to the
+ * configured AI risk-analysis service (Gemini). Only created when both the
+ * evidence text and the on-chain attestation are known, and only if
+ * `GEMINI_API_KEY` is configured on the backend — exposed via
+ * `/api/risk-analyses`.
+ */
+export interface RiskAnalysis {
+  attestationId: string;
+  status: RiskAnalysisStatus;
+  /** Fraud-risk score, 0-100, higher = riskier. Only present once `status` is `complete`. */
+  score?: number;
+  /** The model's confidence in its own score, 0-100. Only present once `status` is `complete`. */
+  confidence?: number;
+  summary?: string;
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
+}

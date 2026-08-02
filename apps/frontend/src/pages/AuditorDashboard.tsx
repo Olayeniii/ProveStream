@@ -43,6 +43,10 @@ export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) 
   async function handleSubmit(values: AttestationFormValues) {
     setStatus({ state: 'pending' });
     try {
+      await api
+        .submitEvidence({ proofHash: values.proofHash, evidenceText: values.evidenceText })
+        .catch(() => undefined);
+
       const { txHash } = await wallet.submitAttestation({
         supplier: values.supplier,
         proofHash: values.proofHash,

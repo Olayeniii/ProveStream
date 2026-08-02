@@ -1,7 +1,9 @@
 import { createTreasuryService, parseAgentConfig, runAgent } from '@provenance-streams/agent';
 
 import { loadServerConfig } from './env.js';
+import { createAttestationReader } from './services/attestationReader.js';
 import { PolicyService } from './services/policyService.js';
+import { RiskAnalysisService } from './services/riskAnalysisService.js';
 import { WalletService } from './services/walletService.js';
 import { createServer } from './server.js';
 import { Store } from './store.js';
@@ -28,6 +30,13 @@ try {
   const walletService: WalletService | undefined = config.circle
     ? new WalletService({ apiKey: config.circle.apiKey, appId: config.circle.appId })
     : undefined;
+  const riskAnalysisService: RiskAnalysisService | undefined = config.gemini
+    ? new RiskAnalysisService({ apiKey: config.gemini.apiKey, model: config.gemini.model })
+    : undefined;
+  const attestationReader = createAttestationReader({
+    rpcUrl: config.rpcUrl,
+    attestationRegistryAddress: config.attestationRegistryAddress,
+  });
 
   const stopAgent = runAgent(config.agentConfig, {
     onAttestation: (attestation) => {
@@ -38,13 +47,39 @@ try {
       ) {
         return;
       }
+      const attestationId = attestation.id.toString();
       store.addAttestation({
-        id: attestation.id.toString(),
+        id: attestationId,
         supplier: attestation.supplier,
         auditor: attestation.auditor,
         policyId: (attestation.policyId ?? 0n).toString(),
         observedAt: new Date().toISOString(),
       });
+
+      if (!riskAnalysisService) {
+        return;
+      }
+      const attestationIdValue = attestation.id;
+      attestationReader
+        .getProofHash(attestationIdValue)
+        .then((proofHash) => {
+          const evidenceText = store.takePendingEvidence(proofHash);
+          if (!evidenceText) {
+            return undefined;
+          }
+          store.createPendingRiskAnalysis(attestationId);
+          return riskAnalysisService
+            .analyzeEvidence({ evidenceText, policyId: (attestation.policyId ?? 0n).toString() })
+            .then((result) => store.updateRiskAnalysisStatus(attestationId, 'complete', result))
+            .catch((error: unknown) => {
+              store.updateRiskAnalysisStatus(attestationId, 'failed', {
+                error: error instanceof Error ? error.message : 'Risk analysis failed.',
+              });
+            });
+        })
+        .catch((error: unknown) => {
+          console.error('Failed to read attestation for risk analysis:', error);
+        });
     },
     onRewardEligible: (reward, context) => {
       if (reward.rewardId === undefined || reward.supplier === undefined) {

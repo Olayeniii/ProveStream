@@ -11,4 +11,6 @@ export type {
   PolicyCreatedEventArgs,
   RewardEligibleEventArgs,
   RewardPolicyRecord,
+  RiskAnalysis,
+  RiskAnalysisStatus,
 } from './types.js';

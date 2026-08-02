@@ -39,11 +39,12 @@ const Form = styled.form`
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  max-width: 440px;
 `;
 
 const Input = styled.input`
   flex: 1;
-  min-width: 200px;
+  min-width: 180px;
   padding: 10px 12px;
   border-radius: ${(props) => props.theme.radius.card};
   border: 1px solid ${(props) => props.theme.colors.border};

@@ -8,6 +8,7 @@ export interface AttestationFormValues {
   supplier: Address;
   policyId: bigint;
   proofHash: Hex;
+  evidenceText: string;
 }
 
 interface AttestationFormProps {
@@ -59,6 +60,7 @@ export function AttestationForm({ submitting, onSubmit }: AttestationFormProps) 
       supplier: supplier as Address,
       policyId: BigInt(policyIdNumber),
       proofHash: keccak256(toHex(proofHash)),
+      evidenceText: proofHash,
     });
   }
 

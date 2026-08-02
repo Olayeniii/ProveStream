@@ -18,6 +18,7 @@ import styled from 'styled-components';
 import { formatUnits } from 'viem';
 
 import logo from '../assets/logo.png';
+import { UsdcIcon } from './UsdcIcon.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient } from '../lib/api.js';
 import { formatAmount } from '../lib/format.js';
@@ -74,7 +75,7 @@ export function AppShell({
 
     api
       .getTreasuryBalance()
-      .then((balance) => setTreasuryLabel(`${formatAmount(balance.amount, 4)} USDC`))
+      .then((balance) => setTreasuryLabel(formatAmount(balance.amount, 4)))
       .catch(() => undefined);
   }, [api]);
 
@@ -101,7 +102,13 @@ export function AppShell({
           <Widget>
             <WidgetLabel>Total Rewards Paid</WidgetLabel>
             <WidgetValue>
-              {totalRewardsPaid !== undefined ? `${totalRewardsPaid} USDC` : '—'}
+              {totalRewardsPaid !== undefined ? (
+                <>
+                  <UsdcIcon /> {totalRewardsPaid} USDC
+                </>
+              ) : (
+                '—'
+              )}
             </WidgetValue>
             <WidgetCaption>
               {streamCount !== undefined ? `Across ${streamCount} streams` : 'Loading…'}
@@ -109,7 +116,15 @@ export function AppShell({
           </Widget>
           <Widget>
             <WidgetLabel>Treasury Balance</WidgetLabel>
-            <WidgetValue>{treasuryLabel ?? '—'}</WidgetValue>
+            <WidgetValue>
+              {treasuryLabel !== undefined ? (
+                <>
+                  <UsdcIcon /> {treasuryLabel} USDC
+                </>
+              ) : (
+                '—'
+              )}
+            </WidgetValue>
             <WidgetCaption>Developer Controlled Wallet</WidgetCaption>
             <TreasuryIcon>
               <Wallet size={16} />
