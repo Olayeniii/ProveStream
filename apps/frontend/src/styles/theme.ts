@@ -19,7 +19,9 @@ export const theme = {
     textMuted: '#64748B',
     primaryText: '#FFFFFF',
     success: '#4ADE80',
-    error: '#F97316',
+    // Design-language 1.3: Coral = attention, needs review, not failure.
+    // Red is reserved for genuine failures only — kept distinct from coral.
+    error: '#EF4444',
   },
   radius: {
     pill: '999px',

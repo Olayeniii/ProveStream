@@ -2,7 +2,13 @@ import type { Payment, RiskAnalysis } from '@provenance-streams/protocol';
 
 import type { AttestationRecord, PolicySummary } from './api.js';
 
-export type NodeStatus = 'waiting' | 'active' | 'complete' | 'failed' | 'unavailable';
+/**
+ * `attention` is distinct from `failed` per the design language (1.3): coral
+ * means "needs review, not failure" (e.g. an auditor referencing a policy id
+ * that doesn't exist — recoverable, not a protocol failure); red (`failed`)
+ * is reserved for genuine failures, like an on-chain settlement that reverted.
+ */
+export type NodeStatus = 'waiting' | 'active' | 'complete' | 'failed' | 'attention' | 'unavailable';
 
 export interface StreamNode {
   key: string;
@@ -23,14 +29,14 @@ export interface Stream {
   nodes: StreamNode[];
 }
 
-export type StreamTone = 'neutral' | 'positive' | 'warning' | 'negative';
+export type StreamTone = 'neutral' | 'positive' | 'warning' | 'attention' | 'negative';
 
 /** A one-line summary of where a stream is, for list views. Derived only from real node statuses. */
 export function getOverallStatus(stream: Stream): { label: string; tone: StreamTone } {
   const byKey = Object.fromEntries(stream.nodes.map((node) => [node.key, node]));
 
-  if (byKey['policy-matched']?.status === 'failed') {
-    return { label: 'Policy Mismatch', tone: 'negative' };
+  if (byKey['policy-matched']?.status === 'attention') {
+    return { label: 'Policy Mismatch', tone: 'attention' };
   }
   if (byKey['supplier-paid']?.status === 'complete') {
     return { label: 'Paid', tone: 'positive' };
@@ -122,9 +128,9 @@ function buildNodes(
     {
       key: 'policy-matched',
       label: 'Policy Matched',
-      status: policy ? 'complete' : 'failed',
+      status: policy ? 'complete' : 'attention',
       timestamp: policy ? attestation.observedAt : undefined,
-      detail: policy ? policy.credentialType : 'Policy not found',
+      detail: policy ? policy.credentialType : 'Policy not found — needs review',
     },
     buildRiskAnalysisNode(riskAnalysis),
     {

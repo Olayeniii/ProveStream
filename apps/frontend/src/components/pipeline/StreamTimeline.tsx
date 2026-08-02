@@ -1,10 +1,7 @@
 import styled from 'styled-components';
 
+import { formatRelativeTime } from '../../lib/format.js';
 import type { StreamNode } from '../../lib/streams.js';
-
-function formatTimestamp(value: string): string {
-  return new Date(value).toLocaleString();
-}
 
 export function StreamTimeline({ nodes }: { nodes: StreamNode[] }) {
   const events = nodes.filter((node) => node.timestamp);
@@ -22,7 +19,9 @@ export function StreamTimeline({ nodes }: { nodes: StreamNode[] }) {
             <Label>{node.label}</Label>
             {node.detail && <Detail>{node.detail}</Detail>}
           </Body>
-          <Time>{formatTimestamp(node.timestamp!)}</Time>
+          <Time title={new Date(node.timestamp!).toLocaleString()}>
+            {formatRelativeTime(node.timestamp!)}
+          </Time>
         </Item>
       ))}
     </List>
@@ -45,7 +44,11 @@ const Dot = styled.span<{ $status: StreamNode['status'] }>`
   border-radius: 999px;
   flex-shrink: 0;
   background: ${(props) =>
-    props.$status === 'failed' ? props.theme.colors.error : props.theme.colors.primary};
+    props.$status === 'failed'
+      ? props.theme.colors.error
+      : props.$status === 'attention'
+        ? props.theme.colors.coral
+        : props.theme.colors.primary};
 
   &::after {
     content: '';

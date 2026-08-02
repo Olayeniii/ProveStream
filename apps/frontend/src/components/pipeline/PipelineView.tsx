@@ -14,14 +14,30 @@ const ICONS: Record<string, LucideIcon> = {
   'supplier-paid': User,
 };
 
-const NODE_COLORS = ['primary', 'mint', 'violet', 'gold', 'coral'] as const;
+type NodeColor = 'primary' | 'mint' | 'violet' | 'gold';
+
+/**
+ * Design-language 1.3: color carries meaning, not position. Blue = trust/start,
+ * mint = verification, violet = intelligence (AI only, never dominant), gold =
+ * value/settlement/money. `attention`/`failed` statuses override this with
+ * coral/red regardless of the node's base color — see `NodeCircle`.
+ */
+const NODE_COLOR_BY_KEY: Record<string, NodeColor> = {
+  'attestation-submitted': 'primary',
+  'signature-verified': 'mint',
+  'policy-matched': 'mint',
+  'ai-risk-analysis': 'violet',
+  'treasury-approved': 'gold',
+  'circle-settlement': 'gold',
+  'supplier-paid': 'gold',
+};
 
 export function PipelineView({ nodes }: { nodes: StreamNode[] }) {
   return (
     <Track>
       {nodes.map((node, index) => {
         const Icon = ICONS[node.key] ?? FileText;
-        const color = NODE_COLORS[index % NODE_COLORS.length] ?? 'primary';
+        const color = NODE_COLOR_BY_KEY[node.key] ?? 'primary';
         const nextNode = nodes[index + 1];
 
         return (
@@ -92,7 +108,7 @@ const NodeColumn = styled.div`
   }
 `;
 
-const NodeCircle = styled.div<{ $status: NodeStatus; $color: (typeof NODE_COLORS)[number] }>`
+const NodeCircle = styled.div<{ $status: NodeStatus; $color: NodeColor }>`
   width: 44px;
   height: 44px;
   border-radius: 999px;
@@ -105,19 +121,25 @@ const NodeCircle = styled.div<{ $status: NodeStatus; $color: (typeof NODE_COLORS
       ? props.theme.colors.textMuted
       : props.$status === 'failed'
         ? props.theme.colors.error
-        : '#fff'};
+        : props.$status === 'attention'
+          ? props.theme.colors.coral
+          : '#fff'};
   background: ${(props) =>
     props.$status === 'complete' || props.$status === 'active'
       ? props.theme.colors[props.$color]
       : props.$status === 'failed'
         ? `${props.theme.colors.error}1a`
-        : props.theme.colors.surfaceMuted};
+        : props.$status === 'attention'
+          ? `${props.theme.colors.coral}1a`
+          : props.theme.colors.surfaceMuted};
   border: ${(props) =>
     props.$status === 'unavailable'
       ? `2px dashed ${props.theme.colors.border}`
       : props.$status === 'failed'
         ? `2px solid ${props.theme.colors.error}`
-        : '2px solid transparent'};
+        : props.$status === 'attention'
+          ? `2px solid ${props.theme.colors.coral}`
+          : '2px solid transparent'};
 `;
 
 const NodeLabel = styled.span`

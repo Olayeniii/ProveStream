@@ -1,8 +1,13 @@
 import styled from 'styled-components';
 
-import { formatReward } from '../../lib/format.js';
+import { formatRelativeTime, formatReward } from '../../lib/format.js';
 import type { Stream, StreamTone } from '../../lib/streams.js';
 import { getOverallStatus } from '../../lib/streams.js';
+
+function latestTimestamp(stream: Stream): string | undefined {
+  const timestamps = stream.nodes.map((node) => node.timestamp).filter((value): value is string => !!value);
+  return timestamps.sort().at(-1);
+}
 
 export function StreamCard({
   stream,
@@ -14,6 +19,7 @@ export function StreamCard({
   onClick?: () => void;
 }) {
   const status = getOverallStatus(stream);
+  const latest = latestTimestamp(stream);
 
   return (
     <Card as={onClick ? 'button' : 'div'} $selected={selected} $clickable={Boolean(onClick)} onClick={onClick}>
@@ -28,6 +34,7 @@ export function StreamCard({
           <Dot key={node.key} $status={node.status} title={node.label} />
         ))}
       </MiniPipeline>
+      {latest && <Timestamp title={new Date(latest).toLocaleString()}>{formatRelativeTime(latest)}</Timestamp>}
     </Card>
   );
 }
@@ -71,17 +78,21 @@ const Badge = styled.span<{ $tone: StreamTone }>`
       ? '#166534'
       : props.$tone === 'warning'
         ? '#92400E'
-        : props.$tone === 'negative'
+        : props.$tone === 'attention'
           ? '#9A3412'
-          : props.theme.colors.textMuted};
+          : props.$tone === 'negative'
+            ? props.theme.colors.error
+            : props.theme.colors.textMuted};
   background: ${(props) =>
     props.$tone === 'positive'
       ? `${props.theme.colors.mint}33`
       : props.$tone === 'warning'
         ? `${props.theme.colors.gold}33`
-        : props.$tone === 'negative'
+        : props.$tone === 'attention'
           ? `${props.theme.colors.coral}33`
-          : props.theme.colors.surfaceMuted};
+          : props.$tone === 'negative'
+            ? `${props.theme.colors.error}1a`
+            : props.theme.colors.surfaceMuted};
 `;
 
 const Subtitle = styled.span`
@@ -112,5 +123,13 @@ const Dot = styled.span<{ $status: string }>`
         ? props.theme.colors.gold
         : props.$status === 'failed'
           ? props.theme.colors.error
-          : props.theme.colors.border};
+          : props.$status === 'attention'
+            ? props.theme.colors.coral
+            : props.theme.colors.border};
+`;
+
+const Timestamp = styled.span`
+  font-size: 0.72rem;
+  color: ${(props) => props.theme.colors.textMuted};
+  margin-top: 2px;
 `;

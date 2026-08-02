@@ -84,7 +84,7 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
           <SectionTitle>Wallet</SectionTitle>
           <StatRow>
             <Stat>
-              <StatLabel>Address</StatLabel>
+              <StatLabel>Reward Account</StatLabel>
               <StatValue as="code">{wallet.walletAddress}</StatValue>
             </Stat>
             <Stat>
