@@ -23,6 +23,7 @@ try {
     { rpcUrl: config.rpcUrl, chainId: config.chainId },
     agentConfig.treasury,
   );
+  store.setTreasuryMode(agentConfig.treasury.mode);
   const policyService = new PolicyService({
     rpcUrl: config.rpcUrl,
     rewardPolicyAddress: config.rewardPolicyAddress,
@@ -39,7 +40,7 @@ try {
     attestationRegistryAddress: config.attestationRegistryAddress,
   });
 
-  const stopAgent = runAgent(config.agentConfig, {
+  const agentControl = runAgent(config.agentConfig, {
     onAttestation: (attestation) => {
       if (
         attestation.id === undefined ||
@@ -96,10 +97,39 @@ try {
     },
     onPaymentSettled: (rewardId, settlement) => {
       if ('txHash' in settlement) {
-        store.updatePaymentStatus(rewardId.toString(), 'complete', { txHash: settlement.txHash });
+        store.updatePaymentStatus(rewardId.toString(), 'complete', {
+          txHash: settlement.txHash,
+          bridged: settlement.bridged,
+          destinationChain: settlement.destinationChain,
+        });
       } else {
         store.updatePaymentStatus(rewardId.toString(), 'failed', { error: settlement.error });
       }
+    },
+    onFraudFlagged: (rewardId, result) => {
+      const payment = store.listPayments().find((entry) => entry.rewardId === rewardId.toString());
+      if (!payment) {
+        return;
+      }
+      store.createFraudAlert({
+        rewardId: rewardId.toString(),
+        attestationId: payment.attestationId,
+        supplier: payment.supplier,
+        policyId: payment.policyId,
+        rewardAmount: payment.rewardAmount,
+        score: result.score,
+        reasons: result.signals.map((signal) => signal.reason),
+      });
+    },
+    onQueueStateChange: (rewardId, state, extra) => {
+      store.updateSettlementJobState(rewardId, state, {
+        attempt: extra?.attempt,
+        error: extra?.error instanceof Error ? extra.error.message : extra?.error?.toString(),
+      });
+    },
+    getDestinationWallet: (supplier) => {
+      const record = store.getDestinationWallet(supplier);
+      return Promise.resolve(record ? { chain: record.chain, address: record.address } : undefined);
     },
   });
 
@@ -111,6 +141,7 @@ try {
     walletService,
     attestationRegistryAddress: config.attestationRegistryAddress,
     defaultWalletBlockchain: config.circle?.treasuryBlockchain ?? 'ARC-TESTNET',
+    agentControl,
   });
 
   const server = app.listen(config.port, () => {
@@ -123,7 +154,7 @@ try {
   });
 
   const shutdown = () => {
-    stopAgent();
+    agentControl.stop();
     server.close(() => process.exit(0));
   };
   process.on('SIGINT', shutdown);

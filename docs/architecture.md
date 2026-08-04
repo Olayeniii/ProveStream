@@ -9,6 +9,9 @@ sequenceDiagram
     participant Registry as AttestationRegistry
     participant Dispatcher as RewardDispatcher
     participant Agent as Autonomous Settlement Agent
+    participant Fraud as FraudService
+    participant Queue as SettlementQueue
+    participant Bridge as BridgeService
     participant DCW as Developer Controlled Wallet
     participant Supplier
 
@@ -18,9 +21,20 @@ sequenceDiagram
     Agent->>Agent: evaluateReward(attestation)
     Agent->>Dispatcher: dispatchReward(attestationId)
     Dispatcher-->>Agent: RewardEligible event
-    Agent->>DCW: sendReward(supplier, rewardAmount)
-    DCW->>Supplier: USDC transfer
-    DCW-->>Agent: transaction hash
+    Agent->>Fraud: check(attestationId, supplier, policyId, rewardAmount)
+    alt flagged
+        Agent-->>Frontend: held for admin review (onFraudFlagged)
+    else clear
+        Agent->>Queue: enqueue settlement job
+        alt destination wallet registered
+            Queue->>Bridge: bridgeToDestination(amount, recipientAddress)
+            Bridge-->>Supplier: USDC minted on destination chain
+        else
+            Queue->>DCW: sendReward(supplier, rewardAmount)
+            DCW->>Supplier: same-chain USDC transfer
+        end
+        Queue-->>Agent: settled / failed (with retries in between)
+    end
 ```
 
 ## Modules
@@ -66,7 +80,7 @@ change is a one-file update, not a hunt across three apps. It also exports:
 
 ### `agent`
 
-Five single-responsibility modules composed in `index.ts`:
+Single-responsibility modules composed in `index.ts`:
 
 - `watcher.ts` — pure I/O: opens a viem `watchContractEvent` subscription on
   `AttestationRegistry` and forwards decoded logs.
@@ -77,18 +91,43 @@ Five single-responsibility modules composed in `index.ts`:
   `simulateContract` first, so `AlreadyDispatched` / `PolicyNotEnabled` are
   reported as typed results instead of thrown errors), and separately
   watches `RewardEligible`.
-- `treasuryService.ts` — the `TreasuryService` interface plus its two
-  implementations (Circle DCW, local signer). See
+- `services/treasuryService.ts` — the `TreasuryService` interface plus its
+  two implementations (Circle DCW, local signer). See
   [`decisions.md`](decisions.md) for why native-currency transfer is the
   right primitive here.
+- `services/fraudService.ts` — rule-based `FraudService.check()`, pure
+  scoring logic over in-memory rolling history (see
+  [`decisions.md`](decisions.md) for why it's a separate signal from the
+  backend's evidence-content Gemini analysis, not a replacement for it).
+  Unit-tested in `fraudService.test.ts`.
+- `services/settlementQueue.ts` — `SettlementQueue`, a single-worker
+  in-memory job queue with exponential-backoff retries and a structured
+  `onStateChange` hook. Unit-tested in `settlementQueue.test.ts`.
+- `services/bridgeService.ts` — `BridgeService.bridgeToDestination()`, wraps
+  `@circle-fin/app-kit`'s `bridge()` for cross-chain CCTP settlement, using
+  whichever adapter (`@circle-fin/adapter-circle-wallets` or
+  `@circle-fin/adapter-viem-v2`) matches the active `TreasuryConfig.mode` so
+  the bridge always signs from the same address the treasury balance
+  reflects.
+- `wallet/destinationWallet.ts` — `validateDestinationWallet()`, pure
+  validation for a supplier's requested destination chain/address.
+  `SUPPORTED_DESTINATION_CHAINS` itself lives in `packages/protocol` (see
+  below) so the agent, backend, and frontend can't disagree about what's
+  supported.
 - `logger.ts` / `config.ts` — unchanged in spirit from Milestone 1: scoped
   leveled logging, and zod-validated configuration (now including the
-  treasury's discriminated `circle | local` config) that fails fast with a
-  clear message.
+  treasury's discriminated `circle | local` config and an optional
+  `fraudScoreThreshold`) that fails fast with a clear message.
 
-`index.ts`'s `runAgent()` wires these together and accepts optional hooks
-(`onAttestation`, `onRewardEligible`, `onPaymentSettled`) so a host process
-can track state (e.g. for HTTP dashboards) without the agent knowing
+`index.ts`'s `runAgent()` wires these together and returns an `AgentControl`
+(`{ stop, approvePayout }`) rather than a bare stop function — `approvePayout`
+lets a host process (the backend, once an admin approves a held fraud alert)
+manually re-enqueue a settlement through the exact same path `RewardEligible`
+would have used automatically, just skipping the fraud check itself. It also
+accepts optional hooks (`onAttestation`, `onRewardEligible`,
+`onPaymentSettled`, `onFraudFlagged`, `onQueueStateChange`,
+`getDestinationWallet`) so a host process can track state (e.g. for HTTP
+dashboards) and supply destination-wallet lookups without the agent knowing
 anything about persistence or transport — the same separation that let
 Milestone 1's `logger.ts` be swapped without touching `watcher.ts`.
 

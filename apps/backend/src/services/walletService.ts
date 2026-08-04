@@ -57,6 +57,11 @@ export class WalletService {
   /**
    * Starts the "set PIN + create wallet" challenge for a first-time user.
    * The returned `challengeId` is executed client-side via `W3SSdk.execute`.
+   *
+   * New wallets are created as `SCA` (Smart Contract Account), required for
+   * Circle Gas Station sponsorship on Arc testnet. Existing `EOA` wallets
+   * from before this milestone keep working unchanged — this only affects
+   * wallet creation, never an existing session.
    */
   async createWalletChallenge(
     userToken: string,
@@ -65,7 +70,7 @@ export class WalletService {
     const response = await this.client.createUserPinWithWallets({
       userToken,
       blockchains: [blockchain as Blockchain],
-      accountType: 'EOA',
+      accountType: 'SCA',
     });
 
     const challengeId = response.data?.challengeId;

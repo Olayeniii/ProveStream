@@ -1,4 +1,5 @@
-import type { TreasuryService } from '@provenance-streams/agent';
+import type { AgentControl, TreasuryService } from '@provenance-streams/agent';
+import { validateDestinationWallet } from '@provenance-streams/agent';
 import { isAddress, isHex } from 'viem';
 import cors from 'cors';
 import express from 'express';
@@ -17,6 +18,7 @@ export interface ServerDependencies {
   walletService: WalletService | undefined;
   defaultWalletBlockchain: string;
   attestationRegistryAddress: string;
+  agentControl: AgentControl;
 }
 
 const createSessionBodySchema = z.object({ userId: z.string().min(1) });
@@ -32,6 +34,11 @@ const waitForTxHashBodySchema = z.object({ userToken: z.string().min(1) });
 const evidenceBodySchema = z.object({
   proofHash: z.string().refine(isHex),
   evidenceText: z.string().min(1),
+});
+const destinationWalletBodySchema = z.object({
+  supplier: z.string().refine(isAddress),
+  chain: z.string().min(1),
+  address: z.string().min(1),
 });
 
 /** Builds the Express app exposing the dashboards' read APIs and the embedded wallet bootstrap. */
@@ -79,6 +86,89 @@ export function createServer(deps: ServerDependencies): Express {
 
   app.get('/api/risk-analyses', (_req, res) => {
     res.json(deps.store.listRiskAnalyses());
+  });
+
+  app.post('/api/destination-wallet', (req, res) => {
+    const body = destinationWalletBodySchema.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: 'supplier, chain, and address are required' });
+      return;
+    }
+
+    const validation = validateDestinationWallet({ chain: body.data.chain, address: body.data.address });
+    if (!validation.valid) {
+      res.status(400).json({ error: validation.error });
+      return;
+    }
+
+    const record = deps.store.registerDestinationWallet({
+      supplier: body.data.supplier,
+      chain: validation.chain,
+      address: validation.address,
+    });
+    res.json(record);
+  });
+
+  app.get('/api/destination-wallet/:supplier', (req, res) => {
+    const supplier = req.params.supplier;
+    if (!isAddress(supplier)) {
+      res.status(400).json({ error: 'supplier must be a valid address' });
+      return;
+    }
+    const record = deps.store.getDestinationWallet(supplier);
+    if (!record) {
+      res.status(404).json({ error: 'No destination wallet registered for this supplier.' });
+      return;
+    }
+    res.json(record);
+  });
+
+  app.get('/api/fraud-alerts', (_req, res) => {
+    res.json(deps.store.listFraudAlerts());
+  });
+
+  app.post('/api/fraud-alerts/:id/approve', (req, res) => {
+    const alert = deps.store.getFraudAlert(req.params.id);
+    if (!alert) {
+      res.status(404).json({ error: 'No fraud alert found for this reward id.' });
+      return;
+    }
+    if (alert.status !== 'flagged') {
+      res.status(409).json({ error: `Fraud alert is already ${alert.status}.` });
+      return;
+    }
+
+    deps.store.updateFraudAlertStatus(alert.rewardId, 'approved');
+    deps.agentControl.approvePayout({
+      rewardId: BigInt(alert.rewardId),
+      supplier: alert.supplier,
+      rewardAmount: BigInt(alert.rewardAmount),
+    });
+    res.json({ ok: true });
+  });
+
+  app.post('/api/fraud-alerts/:id/reject', (req, res) => {
+    const alert = deps.store.getFraudAlert(req.params.id);
+    if (!alert) {
+      res.status(404).json({ error: 'No fraud alert found for this reward id.' });
+      return;
+    }
+    if (alert.status !== 'flagged') {
+      res.status(409).json({ error: `Fraud alert is already ${alert.status}.` });
+      return;
+    }
+
+    deps.store.updateFraudAlertStatus(alert.rewardId, 'rejected');
+    deps.store.updatePaymentStatus(alert.rewardId, 'failed', { error: 'Rejected by admin after fraud review.' });
+    res.json({ ok: true });
+  });
+
+  app.get('/api/agent-health', (_req, res) => {
+    res.json(deps.store.getAgentHealth());
+  });
+
+  app.get('/api/settlement-queue', (_req, res) => {
+    res.json(deps.store.listSettlementJobs());
   });
 
   app.post('/api/wallet-sessions', (req, res, next) => {

@@ -31,6 +31,7 @@ const serverConfigSchema = z.object({
   geminiApiKey: z.string().optional(),
   geminiModel: z.string().min(1).default('gemini-2.0-flash'),
   rewardPolicyDeployedAtBlock: z.coerce.bigint().default(0n),
+  fraudScoreThreshold: z.coerce.number().int().min(0).max(100).optional(),
 });
 
 export interface ServerConfig {
@@ -92,6 +93,7 @@ export function loadServerConfig(): ServerConfig {
     geminiApiKey: process.env.GEMINI_API_KEY,
     geminiModel: process.env.GEMINI_MODEL,
     rewardPolicyDeployedAtBlock: process.env.REWARD_POLICY_DEPLOYED_AT_BLOCK,
+    fraudScoreThreshold: process.env.FRAUD_SCORE_THRESHOLD,
   });
 
   const circleParsed = circleSchema.safeParse(raw.circle);
@@ -126,6 +128,7 @@ export function loadServerConfig(): ServerConfig {
       rewardDispatcherAddress: raw.rewardDispatcherAddress,
       operatorPrivateKey: raw.operatorPrivateKey,
       treasury,
+      fraudScoreThreshold: raw.fraudScoreThreshold,
     },
     circle: circleParsed.success
       ? {

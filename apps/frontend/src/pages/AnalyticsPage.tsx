@@ -73,6 +73,23 @@ export function AnalyticsPage({ env, api }: { env: AppEnv; api: ApiClient }) {
     [payments],
   );
 
+  const successfulSettlements = useMemo(
+    () => payments.filter((payment) => payment.status === 'complete').length,
+    [payments],
+  );
+  const failedSettlements = useMemo(
+    () => payments.filter((payment) => payment.status === 'failed').length,
+    [payments],
+  );
+  const activeSuppliers = useMemo(
+    () => new Set(attestations.map((attestation) => attestation.supplier.toLowerCase())).size,
+    [attestations],
+  );
+  const activeAuditors = useMemo(
+    () => new Set(attestations.map((attestation) => attestation.auditor.toLowerCase())).size,
+    [attestations],
+  );
+
   const averageSettlementSeconds = useMemo(() => {
     const attestationsById = new Map(attestations.map((attestation) => [attestation.id, attestation]));
     const durations = payments
@@ -112,6 +129,22 @@ export function AnalyticsPage({ env, api }: { env: AppEnv; api: ApiClient }) {
           <StatValue>
             {averageSettlementSeconds !== undefined ? formatDuration(averageSettlementSeconds) : '—'}
           </StatValue>
+        </StatCard>
+        <StatCard>
+          <StatLabel>Successful Settlements</StatLabel>
+          <StatValue>{successfulSettlements}</StatValue>
+        </StatCard>
+        <StatCard>
+          <StatLabel>Failed Settlements</StatLabel>
+          <StatValue>{failedSettlements}</StatValue>
+        </StatCard>
+        <StatCard>
+          <StatLabel>Active Suppliers</StatLabel>
+          <StatValue>{activeSuppliers}</StatValue>
+        </StatCard>
+        <StatCard>
+          <StatLabel>Active Auditors</StatLabel>
+          <StatValue>{activeAuditors}</StatValue>
         </StatCard>
       </StatGrid>
 

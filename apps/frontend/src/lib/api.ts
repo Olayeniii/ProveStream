@@ -1,4 +1,11 @@
-import type { Payment, RiskAnalysis } from '@provenance-streams/protocol';
+import type {
+  AgentHealth,
+  DestinationWallet,
+  FraudAlert,
+  Payment,
+  RiskAnalysis,
+  SettlementJobRecord,
+} from '@provenance-streams/protocol';
 
 export interface TreasuryBalance {
   amount: string;
@@ -49,6 +56,21 @@ async function request<T>(baseUrl: string, path: string, init?: RequestInit): Pr
   return response.json() as Promise<T>;
 }
 
+/** Like `request`, but resolves to `undefined` on a 404 instead of throwing (e.g. "no destination wallet registered yet"). */
+async function requestOptional<T>(baseUrl: string, path: string): Promise<T | undefined> {
+  const response = await fetch(`${baseUrl}${path}`);
+  if (response.status === 404) {
+    return undefined;
+  }
+  if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined;
+    throw new Error(
+      body?.error ?? `Request to ${path} failed with status ${response.status.toString()}`,
+    );
+  }
+  return response.json() as Promise<T>;
+}
+
 /** Typed client for the backend's dashboard and embedded-wallet APIs. */
 export function createApiClient(baseUrl: string) {
   return {
@@ -58,6 +80,23 @@ export function createApiClient(baseUrl: string) {
     listAttestations: () => request<AttestationRecord[]>(baseUrl, '/api/attestations'),
     listPayments: () => request<Payment[]>(baseUrl, '/api/payments'),
     listRiskAnalyses: () => request<RiskAnalysis[]>(baseUrl, '/api/risk-analyses'),
+
+    registerDestinationWallet: (input: { supplier: string; chain: string; address: string }) =>
+      request<DestinationWallet>(baseUrl, '/api/destination-wallet', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    getDestinationWallet: (supplier: string) =>
+      requestOptional<DestinationWallet>(baseUrl, `/api/destination-wallet/${supplier}`),
+
+    listFraudAlerts: () => request<FraudAlert[]>(baseUrl, '/api/fraud-alerts'),
+    approveFraudAlert: (rewardId: string) =>
+      request<{ ok: true }>(baseUrl, `/api/fraud-alerts/${rewardId}/approve`, { method: 'POST' }),
+    rejectFraudAlert: (rewardId: string) =>
+      request<{ ok: true }>(baseUrl, `/api/fraud-alerts/${rewardId}/reject`, { method: 'POST' }),
+
+    listSettlementQueue: () => request<SettlementJobRecord[]>(baseUrl, '/api/settlement-queue'),
+    getAgentHealth: () => request<AgentHealth>(baseUrl, '/api/agent-health'),
 
     submitEvidence: (input: { proofHash: string; evidenceText: string }) =>
       request<{ ok: true }>(baseUrl, '/api/evidence', {

@@ -1,6 +1,7 @@
-import type { Payment, RiskAnalysis } from '@provenance-streams/protocol';
+import type { DestinationWallet, Payment, RiskAnalysis } from '@provenance-streams/protocol';
+import { SUPPORTED_DESTINATION_CHAINS } from '@provenance-streams/protocol';
 import { useEffect, useMemo, useState } from 'react';
-import { formatEther } from 'viem';
+import { formatEther, isAddress } from 'viem';
 import styled from 'styled-components';
 
 import { AppShell } from '../components/AppShell.js';
@@ -20,6 +21,7 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
   const [policies, setPolicies] = useState<PolicySummary[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [riskAnalyses, setRiskAnalyses] = useState<RiskAnalysis[]>([]);
+  const [destinationWallet, setDestinationWallet] = useState<DestinationWallet | undefined>(undefined);
 
   useEffect(() => {
     if (wallet.status !== 'ready' || !wallet.walletAddress) {
@@ -48,7 +50,39 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
       .listRiskAnalyses()
       .then(setRiskAnalyses)
       .catch(() => undefined);
+    api
+      .getDestinationWallet(wallet.walletAddress)
+      .then(setDestinationWallet)
+      .catch(() => undefined);
   }, [api, env, wallet.status, wallet.walletAddress]);
+
+  const [destinationChain, setDestinationChain] = useState<string>(SUPPORTED_DESTINATION_CHAINS[0]);
+  const [destinationAddress, setDestinationAddress] = useState('');
+  const [destinationError, setDestinationError] = useState<string | undefined>(undefined);
+  const [savingDestination, setSavingDestination] = useState(false);
+
+  const handleRegisterDestination = () => {
+    if (!wallet.walletAddress) {
+      return;
+    }
+    if (!isAddress(destinationAddress)) {
+      setDestinationError('Enter a valid EVM address.');
+      return;
+    }
+    setDestinationError(undefined);
+    setSavingDestination(true);
+    api
+      .registerDestinationWallet({
+        supplier: wallet.walletAddress,
+        chain: destinationChain,
+        address: destinationAddress,
+      })
+      .then(setDestinationWallet)
+      .catch((error: unknown) =>
+        setDestinationError(error instanceof Error ? error.message : 'Failed to register wallet.'),
+      )
+      .finally(() => setSavingDestination(false));
+  };
 
   const myStreams = useMemo(() => {
     if (!wallet.walletAddress) {
@@ -92,6 +126,47 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
               <StatValue>{balance ?? 'Loading…'}</StatValue>
             </Stat>
           </StatRow>
+        </Card>
+      )}
+
+      {wallet.status === 'ready' && (
+        <Card>
+          <SectionTitle>Destination wallet</SectionTitle>
+          <HelperText>
+            Register a wallet on another chain to receive rewards there instead of on Arc — the agent
+            bridges canonical USDC to it via Circle CCTP.
+          </HelperText>
+          {destinationWallet ? (
+            <StatRow>
+              <Stat>
+                <StatLabel>Chain</StatLabel>
+                <StatValue>{destinationWallet.chain.replace('_', ' ')}</StatValue>
+              </Stat>
+              <Stat>
+                <StatLabel>Address</StatLabel>
+                <StatValue as="code">{destinationWallet.address}</StatValue>
+              </Stat>
+            </StatRow>
+          ) : (
+            <FormRow>
+              <Select value={destinationChain} onChange={(event) => setDestinationChain(event.target.value)}>
+                {SUPPORTED_DESTINATION_CHAINS.map((chain) => (
+                  <option key={chain} value={chain}>
+                    {chain.replace('_', ' ')}
+                  </option>
+                ))}
+              </Select>
+              <Input
+                placeholder="0x…"
+                value={destinationAddress}
+                onChange={(event) => setDestinationAddress(event.target.value)}
+              />
+              <Button onClick={handleRegisterDestination} disabled={savingDestination}>
+                {savingDestination ? 'Registering…' : 'Register'}
+              </Button>
+            </FormRow>
+          )}
+          {destinationError && <ErrorText>{destinationError}</ErrorText>}
         </Card>
       )}
 
@@ -166,8 +241,64 @@ const Empty = styled.p`
   font-size: 0.9rem;
 `;
 
+const HelperText = styled.p`
+  margin: 0;
+  color: ${(props) => props.theme.colors.textMuted};
+  font-size: 0.85rem;
+`;
+
 const Grid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 16px;
+`;
+
+const FormRow = styled.div`
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+`;
+
+const Select = styled.select`
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid ${(props) => props.theme.colors.border};
+  background: ${(props) => props.theme.colors.surface};
+  color: ${(props) => props.theme.colors.text};
+  font-size: 0.9rem;
+`;
+
+const Input = styled.input`
+  flex: 1;
+  min-width: 240px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid ${(props) => props.theme.colors.border};
+  background: ${(props) => props.theme.colors.surface};
+  color: ${(props) => props.theme.colors.text};
+  font-size: 0.9rem;
+  font-family: ${(props) => props.theme.monoFontFamily};
+`;
+
+const Button = styled.button`
+  padding: 10px 20px;
+  border-radius: ${(props) => props.theme.radius.pill};
+  border: none;
+  background: ${(props) => props.theme.colors.primary};
+  color: ${(props) => props.theme.colors.primaryText};
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+`;
+
+const ErrorText = styled.p`
+  margin: 0;
+  color: ${(props) => props.theme.colors.error};
+  font-size: 0.85rem;
 `;

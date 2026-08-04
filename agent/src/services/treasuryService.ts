@@ -124,8 +124,8 @@ class LocalTreasuryService implements TreasuryService {
     return { amount: formatEther(balance), symbol: 'USDC (local demo)' };
   }
 
-  async getAddress(): Promise<Address> {
-    return this.walletClient.account.address;
+  getAddress(): Promise<Address> {
+    return Promise.resolve(this.walletClient.account.address);
   }
 
   async sendReward({ supplier, amount }: SendRewardInput): Promise<SendRewardResult> {

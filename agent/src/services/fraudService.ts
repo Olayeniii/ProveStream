@@ -3,7 +3,6 @@ import type { Address } from 'viem';
 export interface FraudCheckInput {
   attestationId: bigint;
   supplier: Address;
-  auditor: Address;
   policyId: bigint;
   rewardAmount: bigint;
 }

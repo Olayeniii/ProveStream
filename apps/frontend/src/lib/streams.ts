@@ -159,7 +159,12 @@ function buildNodes(
       label: 'Supplier Paid',
       status: paidStatus,
       timestamp: paidStatus === 'complete' ? payment?.updatedAt : undefined,
-      detail: payment?.txHash ?? (paidStatus === 'complete' ? 'Paid' : 'Reward Ready'),
+      detail:
+        paidStatus === 'complete'
+          ? payment?.bridged
+            ? `Bridged to ${payment.destinationChain ?? 'destination chain'} (${payment.destinationTxHash ?? payment.txHash})`
+            : (payment?.txHash ?? 'Paid')
+          : 'Reward Ready',
     },
   ];
 }

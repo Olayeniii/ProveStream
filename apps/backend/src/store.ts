@@ -1,4 +1,15 @@
-import type { Payment, PaymentStatus, RiskAnalysis, RiskAnalysisStatus } from '@provenance-streams/protocol';
+import type {
+  AgentHealth,
+  DestinationWallet,
+  FraudAlert,
+  FraudAlertStatus,
+  Payment,
+  PaymentStatus,
+  RiskAnalysis,
+  RiskAnalysisStatus,
+  SettlementJobRecord,
+  SettlementJobState,
+} from '@provenance-streams/protocol';
 import type { Address, Hex } from 'viem';
 
 export interface AttestationRecord {
@@ -23,10 +34,16 @@ export class Store {
   private readonly payments = new Map<string, Payment>();
   private readonly pendingEvidence = new Map<Hex, string>();
   private readonly riskAnalyses = new Map<string, RiskAnalysis>();
+  private readonly destinationWallets = new Map<Address, DestinationWallet>();
+  private readonly fraudAlerts = new Map<string, FraudAlert>();
+  private readonly settlementJobs = new Map<string, SettlementJobRecord>();
+  private lastEventAt: string | undefined;
+  private treasuryMode = 'local';
 
   addAttestation(record: AttestationRecord): void {
     this.attestations.unshift(record);
     this.attestations.length = Math.min(this.attestations.length, MAX_RECORDS);
+    this.lastEventAt = new Date().toISOString();
   }
 
   listAttestations(): AttestationRecord[] {
@@ -51,12 +68,19 @@ export class Store {
       createdAt: now,
       updatedAt: now,
     });
+    this.lastEventAt = now;
   }
 
   updatePaymentStatus(
     rewardId: string,
     status: PaymentStatus,
-    extra?: { txHash?: Hex; error?: string },
+    extra?: {
+      txHash?: Hex;
+      error?: string;
+      bridged?: boolean | undefined;
+      destinationChain?: string | undefined;
+      destinationTxHash?: Hex;
+    },
   ): void {
     const payment = this.payments.get(rewardId);
     if (!payment) {
@@ -69,6 +93,15 @@ export class Store {
     }
     if (extra?.error) {
       payment.error = extra.error;
+    }
+    if (extra?.bridged) {
+      payment.bridged = extra.bridged;
+    }
+    if (extra?.destinationChain) {
+      payment.destinationChain = extra.destinationChain;
+    }
+    if (extra?.destinationTxHash) {
+      payment.destinationTxHash = extra.destinationTxHash;
     }
   }
 
@@ -125,5 +158,84 @@ export class Store {
 
   listRiskAnalyses(): RiskAnalysis[] {
     return [...this.riskAnalyses.values()];
+  }
+
+  setTreasuryMode(mode: string): void {
+    this.treasuryMode = mode;
+  }
+
+  registerDestinationWallet(input: { supplier: Address; chain: string; address: Address }): DestinationWallet {
+    const record: DestinationWallet = { ...input, registeredAt: new Date().toISOString() };
+    this.destinationWallets.set(input.supplier, record);
+    return record;
+  }
+
+  getDestinationWallet(supplier: Address): DestinationWallet | undefined {
+    return this.destinationWallets.get(supplier);
+  }
+
+  createFraudAlert(input: {
+    rewardId: string;
+    attestationId: string;
+    supplier: Address;
+    policyId: string;
+    rewardAmount: string;
+    score: number;
+    reasons: string[];
+  }): void {
+    const now = new Date().toISOString();
+    this.fraudAlerts.set(input.rewardId, {
+      ...input,
+      status: 'flagged',
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  getFraudAlert(rewardId: string): FraudAlert | undefined {
+    return this.fraudAlerts.get(rewardId);
+  }
+
+  updateFraudAlertStatus(rewardId: string, status: FraudAlertStatus): void {
+    const alert = this.fraudAlerts.get(rewardId);
+    if (!alert) {
+      return;
+    }
+    alert.status = status;
+    alert.updatedAt = new Date().toISOString();
+  }
+
+  listFraudAlerts(): FraudAlert[] {
+    return [...this.fraudAlerts.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  updateSettlementJobState(
+    rewardId: string,
+    state: SettlementJobState,
+    extra?: { attempt?: number | undefined; error?: string | undefined },
+  ): void {
+    this.settlementJobs.set(rewardId, {
+      rewardId,
+      state,
+      attempt: extra?.attempt,
+      error: extra?.error,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  listSettlementJobs(): SettlementJobRecord[] {
+    return [...this.settlementJobs.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  getAgentHealth(): AgentHealth {
+    return {
+      queueDepth: [...this.settlementJobs.values()].filter(
+        (job) => job.state === 'queued' || job.state === 'processing' || job.state === 'retrying',
+      ).length,
+      treasuryMode: this.treasuryMode,
+      lastEventAt: this.lastEventAt,
+      pendingFraudAlerts: [...this.fraudAlerts.values()].filter((alert) => alert.status === 'flagged')
+        .length,
+    };
   }
 }

@@ -63,6 +63,12 @@ export interface Payment {
   error?: string;
   createdAt: string;
   updatedAt: string;
+  /** Set when this payment settled via cross-chain bridge (Circle CCTP) rather than a direct same-chain transfer. */
+  bridged?: boolean;
+  /** The chain the supplier's destination wallet is on, when `bridged` is true (e.g. `Ethereum_Sepolia`). */
+  destinationChain?: string;
+  /** The transaction hash of the mint on the destination chain, when known. */
+  destinationTxHash?: Hex;
 }
 
 /** Lifecycle status of an AI risk-analysis pass over an attestation's submitted evidence. */
@@ -86,4 +92,62 @@ export interface RiskAnalysis {
   error?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A supplier's registered off-chain preference for cross-chain settlement. */
+export interface DestinationWallet {
+  supplier: Address;
+  chain: string;
+  address: Address;
+  registeredAt: string;
+}
+
+/** Lifecycle of a payout the agent's fraud checks held for admin review. */
+export type FraudAlertStatus = 'flagged' | 'approved' | 'rejected';
+
+/**
+ * A payout the agent's rule-based `FraudService` flagged instead of
+ * auto-dispatching, surfaced on the Admin dashboard for a human decision.
+ * Created from `RunAgentHooks.onFraudFlagged`; `approve` re-enqueues the
+ * held settlement via `AgentControl.approvePayout`, `reject` leaves it
+ * unsettled permanently.
+ */
+export interface FraudAlert {
+  rewardId: string;
+  attestationId: string;
+  supplier: Address;
+  policyId: string;
+  rewardAmount: string;
+  score: number;
+  reasons: string[];
+  status: FraudAlertStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Lifecycle state of an in-flight or completed settlement job, mirroring `SettlementQueue`'s job states. */
+export type SettlementJobState = 'queued' | 'processing' | 'retrying' | 'settled' | 'failed';
+
+/** A settlement job's current state, surfaced on the Admin dashboard's settlement queue view. */
+export interface SettlementJobRecord {
+  rewardId: string;
+  state: SettlementJobState;
+  attempt?: number | undefined;
+  error?: string | undefined;
+  updatedAt: string;
+}
+
+/**
+ * A point-in-time snapshot of the autonomous agent's operational status,
+ * exposed via `/api/agent-health` for the Admin dashboard.
+ */
+export interface AgentHealth {
+  /** Number of settlement jobs waiting or currently processing. */
+  queueDepth: number;
+  /** `'circle'` (real Developer-Controlled Wallet) or `'local'` (demo signer fallback). */
+  treasuryMode: string;
+  /** ISO timestamp of the most recent `AttestationSubmitted` or `RewardEligible` event the agent observed, if any. */
+  lastEventAt?: string | undefined;
+  /** Count of payouts currently held for fraud review. */
+  pendingFraudAlerts: number;
 }

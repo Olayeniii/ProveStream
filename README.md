@@ -9,24 +9,39 @@ Wallet, Arc App Kit, and Circle CCTP for cross-chain settlement.
 **Milestone 1** proved the core loop — an auditor submits an attestation, the
 chain emits an event, and an agent observes it and evaluates a reward rule.
 
-**Milestone 2** (this one) makes that loop autonomous and real: embedded
-wallets replace placeholder wallet handling, a Developer Controlled Wallet
-treasury sends real test USDC on Arc, on-chain reward policies decide
-eligibility, and an Autonomous Settlement Agent processes the full pipeline
-end to end. Cross-chain settlement (Circle CCTP) is reserved for Milestone 3.
+**Milestone 2** made that loop autonomous and real: embedded wallets replace
+placeholder wallet handling, a Developer Controlled Wallet treasury sends
+real test USDC on Arc, on-chain reward policies decide eligibility, and an
+Autonomous Settlement Agent processes the full pipeline end to end.
+
+**Milestone 3** (this one) adds production-grade settlement on top of that
+pipeline without rebuilding it: a rule-based fraud check holds suspicious
+payouts for admin review instead of auto-dispatching them, a retrying
+settlement queue processes payouts one at a time with exponential backoff,
+and — when a supplier registers a destination wallet on another chain —
+the agent bridges canonical USDC to it cross-chain via **Circle CCTP**
+(through **Arc App Kit**'s `bridge()`), instead of paying out same-chain.
+New embedded wallets are created as Smart Contract Accounts so **Circle Gas
+Station** can sponsor their gas on Arc testnet.
 
 ## Architecture
 
 ```mermaid
 graph TD
-    A[Auditor] --> B[Embedded Wallet]
+    A[Auditor] --> B[Embedded Wallet - SCA / Gas Station]
     B --> C[AttestationRegistry]
     C --> D[RewardDispatcher]
     D --> E[RewardEligible Event]
-    E --> F[Autonomous Settlement Agent]
-    F --> G[Developer Controlled Wallet]
-    G --> H[USDC Transfer]
+    E --> F[Fraud Service]
+    F -- flagged --> J[Admin Review]
+    J -- approved --> K[Settlement Queue]
+    F -- clear --> K[Settlement Queue]
+    K --> G[Developer Controlled Wallet]
+    G -- no destination wallet --> H[Same-chain USDC Transfer]
+    G -- destination wallet registered --> L[Bridge Service - Arc App Kit / CCTP]
+    L --> M[USDC minted on destination chain]
     H --> I[Supplier Embedded Wallet]
+    M --> I
 ```
 
 ### Sequence
@@ -37,24 +52,36 @@ sequenceDiagram
     participant Frontend
     participant Registry as AttestationRegistry
     participant Dispatcher as RewardDispatcher
-    participant Agent as Autonomous Settlement Agent
+    participant Fraud as FraudService
+    participant Queue as SettlementQueue
+    participant Bridge as BridgeService (App Kit / CCTP)
     participant DCW as Developer Controlled Wallet
     participant Supplier
 
-    Auditor->>Frontend: Sign in with Embedded Wallet
+    Auditor->>Frontend: Sign in with Embedded Wallet (SCA, gasless via Gas Station)
     Frontend->>Registry: submitAttestation(supplier, proofHash, policyId)
-    Registry-->>Agent: AttestationSubmitted event
-    Agent->>Dispatcher: dispatchReward(attestationId)
-    Dispatcher-->>Agent: RewardEligible event
-    Agent->>DCW: sendReward(supplier, rewardAmount)
-    DCW->>Supplier: USDC transfer
-    DCW-->>Agent: transaction hash
-    Agent-->>Frontend: payment status + tx hash (via backend API)
+    Registry-->>Dispatcher: AttestationSubmitted event
+    Dispatcher-->>Fraud: RewardEligible event
+    Fraud->>Fraud: score(attestationId, supplier, policyId, rewardAmount)
+    alt score >= threshold
+        Fraud-->>Frontend: held for admin review (Admin approves/rejects)
+    else score below threshold
+        Fraud->>Queue: enqueue settlement
+        Queue->>Queue: retry with backoff on failure
+        alt supplier has a destination wallet
+            Queue->>Bridge: bridgeToDestination(amount, recipientAddress)
+            Bridge->>Supplier: USDC minted on destination chain (CCTP)
+        else
+            Queue->>DCW: sendReward(supplier, rewardAmount)
+            DCW->>Supplier: same-chain USDC transfer
+        end
+        Queue-->>Frontend: payment status + tx hash (via backend API)
+    end
 ```
 
-This milestone keeps settlement on Arc. **Milestone 3** adds Circle CCTP,
-Arc App Kit, a Paymaster, and more advanced treasury policies on top of this
-architecture, without requiring the pipeline above to be rebuilt.
+This milestone's fraud checks, retry queue, and bridging are layered onto
+Milestone 2's pipeline via `runAgent`'s hooks — none of `watcher.ts`,
+`dispatcher.ts`, or the contracts changed.
 
 ### Components
 
@@ -64,9 +91,9 @@ architecture, without requiring the pipeline above to be rebuilt.
 | Reward policy               | [`contracts/RewardPolicy.sol`](contracts/RewardPolicy.sol)               | Owner-configurable reward policies (credential type, reward amount, enabled).                                                      |
 | Reward dispatcher           | [`contracts/RewardDispatcher.sol`](contracts/RewardDispatcher.sol)       | Validates eligibility against a policy, prevents duplicate rewards, emits `RewardEligible`. Holds no funds.                        |
 | Shared protocol             | [`packages/protocol`](packages/protocol)                                 | Contract ABIs, decoded event/struct types, and chain config (local Hardhat + Arc testnet) shared everywhere.                       |
-| Autonomous Settlement Agent | [`agent`](agent)                                                         | Watches `AttestationSubmitted` → dispatches rewards on-chain → watches `RewardEligible` → executes USDC payments via the treasury. |
-| Backend API                 | [`apps/backend`](apps/backend)                                           | Runs the agent, exposes dashboard read APIs, and brokers Circle embedded-wallet sessions for the frontend.                         |
-| Frontend                    | [`apps/frontend`](apps/frontend)                                         | Auditor, Supplier, and Admin dashboards; embedded-wallet login; attestation submission.                                            |
+| Autonomous Settlement Agent | [`agent`](agent)                                                         | Watches `AttestationSubmitted` → dispatches rewards on-chain → watches `RewardEligible` → fraud-checks, queues, and settles payments (same-chain or cross-chain bridge) via the treasury. |
+| Backend API                 | [`apps/backend`](apps/backend)                                           | Runs the agent, exposes dashboard read/admin APIs, and brokers Circle embedded-wallet sessions for the frontend.                    |
+| Frontend                    | [`apps/frontend`](apps/frontend)                                         | Auditor, Supplier, Policies, Treasury, Analytics, and Admin dashboards; embedded-wallet login; attestation submission.              |
 
 See [`docs/architecture.md`](docs/architecture.md) for a closer look at each
 module's internals, and [`docs/decisions.md`](docs/decisions.md) for the
@@ -112,7 +139,46 @@ The agent's own operator wallet (`OPERATOR_PRIVATE_KEY`) is separate from
 both: it only pays gas to call `RewardDispatcher.dispatchReward`, and never
 holds treasury funds.
 
-## Current progress (Milestone 2)
+## Fraud review, settlement queue, and cross-chain settlement
+
+Before a `RewardEligible` payout is settled, `agent/src/services/fraudService.ts`
+scores it against in-memory rolling history (repeated submissions, payout
+frequency, policy-pair reuse, first-time-supplier heuristic) — duplicate
+proof hashes are already rejected on-chain, so they're not re-checked here.
+Payouts scoring at or above `FRAUD_SCORE_THRESHOLD` (default `70`) are held
+and surfaced on the Admin dashboard's **Fraud Alerts** section instead of
+being auto-dispatched; approving one there re-enqueues it for settlement,
+rejecting one leaves it permanently unsettled.
+
+Payouts that clear the fraud check go onto `agent/src/services/settlementQueue.ts`,
+a single-worker in-memory queue (settlement transactions share the
+treasury's nonce, so processing one at a time avoids races) that retries
+recoverable failures with exponential backoff before giving up. Its live
+state is the Admin dashboard's **Settlement Queue** section.
+
+If the supplier registered a destination wallet on another chain (Supplier
+dashboard → **Destination Wallet**), the queue routes the payout through
+`agent/src/services/bridgeService.ts` instead of a same-chain transfer: it
+calls `@circle-fin/app-kit`'s `bridge()`, which "abstracts the underlying
+CCTP flow" — burn, attestation, and mint — so the agent doesn't orchestrate
+those steps itself. The destination is a wallet this agent doesn't control,
+so the bridge uses App Kit's forwarder-only destination (`useForwarder:
+true`): Circle's Orbit relayer submits the mint on the supplier's behalf.
+Suppliers without a registered destination wallet keep getting paid
+same-chain on Arc, unchanged from Milestone 2. Currently supported
+destination: Ethereum Sepolia.
+
+## Gas Station (Arc's Paymaster)
+
+Arc's account-abstraction "Paymaster" story is Circle **Gas Station**, which
+has a preconfigured sponsorship policy on Arc testnet (no console setup
+needed). Sponsorship requires a **Smart Contract Account (SCA)** wallet, not
+an `EOA`. `apps/backend/src/services/walletService.ts`'s
+`createWalletChallenge` creates all **new** embedded wallets as `SCA`;
+existing `EOA` wallets from before this milestone keep working unchanged —
+this is a forward-only change, never a forced re-migration.
+
+## Current progress (Milestone 3)
 
 - [x] `RewardPolicy.sol` — `createPolicy` / `updatePolicy` / `disablePolicy` /
       `getPolicy`, owner-controlled (OpenZeppelin `Ownable`), policies
@@ -142,19 +208,48 @@ holds treasury funds.
       `dispatchReward`, which emits `RewardEligible`, which the agent
       settles — and the resulting transaction hash shows up in the Supplier
       and Admin dashboards.
+- [x] `FraudService` — rule-based risk scoring; payouts at or above
+      `FRAUD_SCORE_THRESHOLD` are held for admin review instead of
+      auto-dispatched.
+- [x] `SettlementQueue` — single-worker retrying queue with exponential
+      backoff, structured lifecycle events (`queued`/`processing`/
+      `retrying`/`settled`/`failed`).
+- [x] `BridgeService` — cross-chain settlement to a supplier's own wallet on
+      Ethereum Sepolia via Arc App Kit's CCTP `bridge()`, used automatically
+      once a supplier registers a destination wallet; same-chain payout
+      remains the default otherwise.
+- [x] Embedded wallets switch to `SCA` for new wallets, enabling Circle Gas
+      Station sponsorship on Arc testnet.
+- [x] `apps/backend` gains `/api/destination-wallet`, `/api/fraud-alerts`
+      (+ approve/reject), `/api/settlement-queue`, and `/api/agent-health`.
+- [x] Supplier dashboard: register a destination wallet; reward history
+      shows bridge status when a payout settled cross-chain.
+- [x] Admin dashboard: Settlement Queue, Fraud Alerts (approve/reject),
+      Recent Bridge Operations, Agent Health sections.
+- [x] Analytics: successful/failed settlement counts, active
+      suppliers/auditors, alongside the existing average-settlement-time
+      metric.
+- [x] Unit tests for `FraudService`'s scoring and `SettlementQueue`'s
+      retry/backoff state machine (`agent/src/services/*.test.ts`).
 
-Not implemented (by design, per Milestone 2's scope): Circle CCTP,
-cross-chain payouts, advanced fraud scoring, and a Paymaster.
+Not implemented (documented scope limits, not gaps): automated integration
+tests against live Arc testnet/Circle sandbox (impractical without live
+credentials in CI — manual end-to-end verification instead, see below), and
+account-abstraction providers beyond Circle Gas Station.
 
-## Next milestone
+## Roadmap beyond hackathon
 
-Milestone 3 will extend this architecture with:
-
-- **Circle CCTP** — cross-chain USDC settlement.
-- **Arc App Kit** — richer wallet/session tooling in the frontend.
-- **Paymaster** — sponsor gas for attestation submission and payouts.
+- **More destination chains** — `SUPPORTED_DESTINATION_CHAINS`
+  (`packages/protocol/src/destinationChains.ts`) is a single-array extension
+  point; each addition needs the matching `BridgeChain` value from Arc App
+  Kit.
+- **Persistent storage** — swap `apps/backend/src/store.ts`'s in-memory maps
+  for a real database; every read/write already goes through this one file.
 - **Advanced treasury policies** — daily spending limits, allowed-contract
   lists, multi-approver controls.
+- **Real OTP-verified embedded-wallet login and passkey support** — see
+  [`docs/decisions.md`](docs/decisions.md) for why this milestone's
+  email-as-userId login is an intentional, honest scope cut, not a shortcut.
 
 ## Repository structure
 
@@ -165,7 +260,7 @@ provenance-streams/
 │   └── backend/        # Express API: agent runner, dashboards, wallet sessions
 ├── packages/
 │   └── protocol/       # Shared ABIs, types, chain config
-├── agent/              # watcher / dispatcher / treasuryService / rewardEngine / logger
+├── agent/              # watcher / dispatcher / rewardEngine / logger / services (treasury, fraud, bridge, settlement queue) / wallet
 ├── contracts/          # AttestationRegistry, RewardPolicy, RewardDispatcher
 ├── ignition/           # Deployment module
 ├── scripts/            # `hardhat run` scripts
@@ -212,6 +307,11 @@ To enable embedded wallets, add your Circle sandbox `CIRCLE_API_KEY` and
 `CIRCLE_APP_ID` (and set the matching `VITE_CIRCLE_APP_ID`). Leave
 `CIRCLE_ENTITY_SECRET` / `CIRCLE_TREASURY_WALLET_ID` unset to keep using the
 local demo treasury.
+
+`FRAUD_SCORE_THRESHOLD` (optional, default `70`) tunes when a payout gets
+held for admin review instead of auto-dispatched — see [Fraud review,
+settlement queue, and cross-chain settlement](#fraud-review-settlement-queue-and-cross-chain-settlement)
+above.
 
 ### 3. Start a local chain
 

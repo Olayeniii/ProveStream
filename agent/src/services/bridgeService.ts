@@ -61,10 +61,11 @@ export class BridgeService {
         return { status: 'failed', error: `Bridge ended in state "${result.state}"` };
       }
 
-      const mintStep = result.steps.find((step) => step.name === 'mint') ?? result.steps.at(-1);
+      const mintStep =
+        result.steps.find((step) => step.name.toLowerCase() === 'mint') ?? result.steps.at(-1);
       return {
         status: 'complete',
-        destinationTxHash: mintStep?.data?.txHash as Hex | undefined,
+        destinationTxHash: mintStep?.txHash as Hex | undefined,
         explorerUrl: mintStep?.explorerUrl,
       };
     } catch (error) {

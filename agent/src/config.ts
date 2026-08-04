@@ -37,6 +37,8 @@ export const agentConfigSchema = z.object({
   rewardDispatcherAddress: addressSchema,
   operatorPrivateKey: privateKeySchema,
   treasury: treasuryConfigSchema,
+  /** Score at or above which `FraudService` holds a payout for admin review instead of auto-dispatching. Defaults to `FraudService`'s own default (70) when unset. */
+  fraudScoreThreshold: z.coerce.number().int().min(0).max(100).optional(),
 });
 
 export type TreasuryConfig = z.infer<typeof treasuryConfigSchema>;
