@@ -118,7 +118,9 @@ const StatusPill = styled.span<{ $status: string }>`
   color: ${(props) =>
     props.$status === 'complete' ? props.theme.colors.primary : props.theme.colors.textMuted};
   background: ${(props) =>
-    props.$status === 'complete' ? `${props.theme.colors.primary}1a` : props.theme.colors.surfaceMuted};
+    props.$status === 'complete'
+      ? `${props.theme.colors.primary}1a`
+      : props.theme.colors.surfaceMuted};
 `;
 
 const Empty = styled.p`
@@ -143,11 +145,11 @@ const Gauge = styled.div<{ $percent: number; $tone: 'positive' | 'warning' | 'ne
   justify-content: center;
   background: conic-gradient(
     ${(props) =>
-        props.$tone === 'positive'
-          ? props.theme.colors.mint
-          : props.$tone === 'warning'
-            ? props.theme.colors.gold
-            : props.theme.colors.coral}
+      props.$tone === 'positive'
+        ? props.theme.colors.mint
+        : props.$tone === 'warning'
+          ? props.theme.colors.gold
+          : props.theme.colors.coral}
       ${(props) => props.$percent * 3.6}deg,
     ${(props) => props.theme.colors.surfaceMuted} 0deg
   );
@@ -175,11 +177,7 @@ const GaugeCaption = styled.span<{ $tone: 'positive' | 'warning' | 'negative' }>
   font-size: 0.85rem;
   font-weight: 600;
   color: ${(props) =>
-    props.$tone === 'positive'
-      ? '#166534'
-      : props.$tone === 'warning'
-        ? '#92400E'
-        : '#9A3412'};
+    props.$tone === 'positive' ? '#166534' : props.$tone === 'warning' ? '#92400E' : '#9A3412'};
 `;
 
 const Summary = styled.p`

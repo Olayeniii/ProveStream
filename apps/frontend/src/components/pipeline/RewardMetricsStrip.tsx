@@ -34,7 +34,9 @@ export function RewardMetricsStrip({ stream }: { stream: Stream }) {
         </IconBadge>
         <div>
           <CellLabel>Policy</CellLabel>
-          <CellValue>{stream.policy?.credentialType ?? `#${stream.attestation.policyId}`}</CellValue>
+          <CellValue>
+            {stream.policy?.credentialType ?? `#${stream.attestation.policyId}`}
+          </CellValue>
         </div>
       </Cell>
       <Cell>

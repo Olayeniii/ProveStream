@@ -16,7 +16,9 @@ export type DestinationWalletValidation =
   | { valid: false; error: string };
 
 /** Validates a supplier's requested destination wallet before it's stored or bridged to. */
-export function validateDestinationWallet(input: DestinationWalletInput): DestinationWalletValidation {
+export function validateDestinationWallet(
+  input: DestinationWalletInput,
+): DestinationWalletValidation {
   if (!isAddress(input.address)) {
     return { valid: false, error: 'Not a valid EVM address.' };
   }

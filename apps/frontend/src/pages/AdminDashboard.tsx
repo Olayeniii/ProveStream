@@ -1,4 +1,9 @@
-import type { AgentHealth, FraudAlert, Payment, SettlementJobRecord } from '@provenance-streams/protocol';
+import type {
+  AgentHealth,
+  FraudAlert,
+  Payment,
+  SettlementJobRecord,
+} from '@provenance-streams/protocol';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
@@ -87,14 +92,20 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
 
   const handleAlertAction = (rewardId: string, action: 'approve' | 'reject') => {
     setAlertActionError(undefined);
-    const call = action === 'approve' ? api.approveFraudAlert(rewardId) : api.rejectFraudAlert(rewardId);
+    const call =
+      action === 'approve' ? api.approveFraudAlert(rewardId) : api.rejectFraudAlert(rewardId);
     call.then(refresh).catch((error: unknown) => {
       setAlertActionError(error instanceof Error ? error.message : `Failed to ${action} payout.`);
     });
   };
 
   return (
-    <AppShell title="Admin" subtitle="System health, settlement queue, and fraud review" env={env} api={api}>
+    <AppShell
+      title="Admin"
+      subtitle="System health, settlement queue, and fraud review"
+      env={env}
+      api={api}
+    >
       <Card>
         <SectionTitle>Health</SectionTitle>
         <HealthRow>

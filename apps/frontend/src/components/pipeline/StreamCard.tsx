@@ -5,7 +5,9 @@ import type { Stream, StreamTone } from '../../lib/streams.js';
 import { getOverallStatus } from '../../lib/streams.js';
 
 function latestTimestamp(stream: Stream): string | undefined {
-  const timestamps = stream.nodes.map((node) => node.timestamp).filter((value): value is string => !!value);
+  const timestamps = stream.nodes
+    .map((node) => node.timestamp)
+    .filter((value): value is string => !!value);
   return timestamps.sort().at(-1);
 }
 
@@ -22,19 +24,30 @@ export function StreamCard({
   const latest = latestTimestamp(stream);
 
   return (
-    <Card as={onClick ? 'button' : 'div'} $selected={selected} $clickable={Boolean(onClick)} onClick={onClick}>
+    <Card
+      as={onClick ? 'button' : 'div'}
+      $selected={selected}
+      $clickable={Boolean(onClick)}
+      onClick={onClick}
+    >
       <TopRow>
         <Title>Attestation #{stream.id}</Title>
         <Badge $tone={status.tone}>{status.label}</Badge>
       </TopRow>
-      <Subtitle>{stream.policy?.credentialType ?? `Policy #${stream.attestation.policyId}`}</Subtitle>
+      <Subtitle>
+        {stream.policy?.credentialType ?? `Policy #${stream.attestation.policyId}`}
+      </Subtitle>
       {stream.payment && <Amount>{formatReward(stream.payment.rewardAmount)}</Amount>}
       <MiniPipeline>
         {stream.nodes.map((node) => (
           <Dot key={node.key} $status={node.status} title={node.label} />
         ))}
       </MiniPipeline>
-      {latest && <Timestamp title={new Date(latest).toLocaleString()}>{formatRelativeTime(latest)}</Timestamp>}
+      {latest && (
+        <Timestamp title={new Date(latest).toLocaleString()}>
+          {formatRelativeTime(latest)}
+        </Timestamp>
+      )}
     </Card>
   );
 }

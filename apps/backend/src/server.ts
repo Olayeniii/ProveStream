@@ -95,7 +95,10 @@ export function createServer(deps: ServerDependencies): Express {
       return;
     }
 
-    const validation = validateDestinationWallet({ chain: body.data.chain, address: body.data.address });
+    const validation = validateDestinationWallet({
+      chain: body.data.chain,
+      address: body.data.address,
+    });
     if (!validation.valid) {
       res.status(400).json({ error: validation.error });
       return;
@@ -159,7 +162,9 @@ export function createServer(deps: ServerDependencies): Express {
     }
 
     deps.store.updateFraudAlertStatus(alert.rewardId, 'rejected');
-    deps.store.updatePaymentStatus(alert.rewardId, 'failed', { error: 'Rejected by admin after fraud review.' });
+    deps.store.updatePaymentStatus(alert.rewardId, 'failed', {
+      error: 'Rejected by admin after fraud review.',
+    });
     res.json({ ok: true });
   });
 

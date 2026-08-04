@@ -84,7 +84,11 @@ export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) 
       api={api}
       headerActions={
         wallet.status === 'ready' && wallet.walletAddress ? (
-          <WalletChip address={wallet.walletAddress} role="Auditor Wallet" onSignOut={wallet.logout} />
+          <WalletChip
+            address={wallet.walletAddress}
+            role="Auditor Wallet"
+            onSignOut={wallet.logout}
+          />
         ) : undefined
       }
     >

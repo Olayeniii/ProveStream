@@ -71,7 +71,11 @@ export class FraudService {
   check(input: FraudCheckInput, now: number = Date.now()): FraudCheckResult {
     const signals: FraudSignal[] = [];
 
-    const recentSubmissions = this.recentTimestamps(this.submissionsBySupplier, input.supplier, now);
+    const recentSubmissions = this.recentTimestamps(
+      this.submissionsBySupplier,
+      input.supplier,
+      now,
+    );
     if (recentSubmissions.length >= 3) {
       signals.push({
         reason: `${(recentSubmissions.length + 1).toString()} attestations from this supplier in the last ${(this.config.windowMs / 60_000).toString()} minutes`,
@@ -106,7 +110,10 @@ export class FraudService {
     this.submissionsByPolicyPair.set(policyPairKey, priorPolicyClaims + 1);
     this.knownSuppliers.add(input.supplier);
 
-    const score = Math.min(100, signals.reduce((sum, signal) => sum + signal.points, 0));
+    const score = Math.min(
+      100,
+      signals.reduce((sum, signal) => sum + signal.points, 0),
+    );
     return { score, flagged: score >= this.config.scoreThreshold, signals };
   }
 

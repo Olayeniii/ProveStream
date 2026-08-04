@@ -41,7 +41,10 @@ export function getOverallStatus(stream: Stream): { label: string; tone: StreamT
   if (byKey['supplier-paid']?.status === 'complete') {
     return { label: 'Paid', tone: 'positive' };
   }
-  if (byKey['supplier-paid']?.status === 'failed' || byKey['circle-settlement']?.status === 'failed') {
+  if (
+    byKey['supplier-paid']?.status === 'failed' ||
+    byKey['circle-settlement']?.status === 'failed'
+  ) {
     return { label: 'Failed', tone: 'negative' };
   }
   if (byKey['circle-settlement']?.status === 'active') {
@@ -73,7 +76,9 @@ export function buildStreams(
   riskAnalyses: RiskAnalysis[] = [],
 ): Stream[] {
   const policiesById = new Map(policies.map((policy) => [policy.id, policy]));
-  const paymentsByAttestationId = new Map(payments.map((payment) => [payment.attestationId, payment]));
+  const paymentsByAttestationId = new Map(
+    payments.map((payment) => [payment.attestationId, payment]),
+  );
   const riskAnalysesByAttestationId = new Map(
     riskAnalyses.map((analysis) => [analysis.attestationId, analysis]),
   );
@@ -109,7 +114,11 @@ function buildNodes(
           : 'waiting';
 
   const paidStatus: NodeStatus =
-    payment?.status === 'complete' ? 'complete' : payment?.status === 'failed' ? 'failed' : 'waiting';
+    payment?.status === 'complete'
+      ? 'complete'
+      : payment?.status === 'failed'
+        ? 'failed'
+        : 'waiting';
 
   return [
     {

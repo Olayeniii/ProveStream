@@ -30,7 +30,10 @@ try {
     deployedAtBlock: config.rewardPolicyDeployedAtBlock,
   });
   const walletService: WalletService | undefined = config.embeddedWallet
-    ? new WalletService({ apiKey: config.embeddedWallet.apiKey, appId: config.embeddedWallet.appId })
+    ? new WalletService({
+        apiKey: config.embeddedWallet.apiKey,
+        appId: config.embeddedWallet.appId,
+      })
     : undefined;
   const riskAnalysisService: RiskAnalysisService | undefined = config.gemini
     ? new RiskAnalysisService({ apiKey: config.gemini.apiKey, model: config.gemini.model })

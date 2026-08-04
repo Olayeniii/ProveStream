@@ -18,7 +18,11 @@ const DEFAULT_CONFIG: SettlementQueueConfig = {
 };
 
 export interface SettlementQueueHooks {
-  onStateChange?: (jobId: string, state: JobState, extra?: { attempt?: number; error?: unknown }) => void;
+  onStateChange?: (
+    jobId: string,
+    state: JobState,
+    extra?: { attempt?: number; error?: unknown },
+  ) => void;
 }
 
 function sleep(ms: number): Promise<void> {

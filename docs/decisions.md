@@ -150,7 +150,7 @@ Gemini, whose failure mode is already handled by falling back to
 `unavailable` in the Streams view), and a rule-based check is auditable in a
 way an LLM's judgment isn't — useful properties for something that gates a
 real payout, not just an informational panel. Duplicate proof hashes are
-deliberately *not* re-checked here: `AttestationRegistry` already rejects
+deliberately _not_ re-checked here: `AttestationRegistry` already rejects
 them on-chain (`DuplicateProofHash`), so a real duplicate can never reach
 this service's `check()` in the first place — re-scoring it would just be
 dead code exercised by an unreachable input.
@@ -162,7 +162,7 @@ dead code exercised by an unreachable input.
 hiccup, a bridge timeout) from "hopeless" (an invalid recipient address) up
 front. This is a deliberate simplification: a transient error succeeds on
 retry either way, and a permanent one simply exhausts its attempts and lands
-in `failed` — the correct terminal state regardless of *why* it failed.
+in `failed` — the correct terminal state regardless of _why_ it failed.
 Building a real error taxonomy would add complexity without changing either
 outcome at this scale.
 
@@ -170,7 +170,7 @@ outcome at this scale.
 
 When an admin approves a fraud-flagged payout, the backend doesn't
 re-implement "send the payment" — `runAgent()`'s returned `AgentControl`
-exposes `approvePayout()`, which calls the *same* internal
+exposes `approvePayout()`, which calls the _same_ internal
 `enqueueSettlement()` closure the automatic `RewardEligible` handler uses
 (same-chain-or-bridge decision, same retry queue, same `onPaymentSettled`
 hook). The only difference is that the fraud check itself is skipped, since

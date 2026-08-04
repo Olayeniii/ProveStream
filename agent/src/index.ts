@@ -270,7 +270,10 @@ export function runAgent(configInput: AgentConfigInput, hooks: RunAgentHooks = {
           amount: rewardAmount,
           rewardId: rewardId.toString(),
         });
-        logger.info('Reward payment sent', { rewardId: rewardId.toString(), txHash: result.txHash });
+        logger.info('Reward payment sent', {
+          rewardId: rewardId.toString(),
+          txHash: result.txHash,
+        });
         fraudService.recordPayout(supplier);
         hooks.onPaymentSettled?.(rewardId, { txHash: result.txHash });
       },

@@ -91,7 +91,9 @@ export function AnalyticsPage({ env, api }: { env: AppEnv; api: ApiClient }) {
   );
 
   const averageSettlementSeconds = useMemo(() => {
-    const attestationsById = new Map(attestations.map((attestation) => [attestation.id, attestation]));
+    const attestationsById = new Map(
+      attestations.map((attestation) => [attestation.id, attestation]),
+    );
     const durations = payments
       .filter((payment) => payment.status === 'complete')
       .map((payment) => {
@@ -103,7 +105,9 @@ export function AnalyticsPage({ env, api }: { env: AppEnv; api: ApiClient }) {
         const end = new Date(payment.updatedAt).getTime();
         return (end - start) / 1000;
       })
-      .filter((value): value is number => value !== undefined && Number.isFinite(value) && value >= 0);
+      .filter(
+        (value): value is number => value !== undefined && Number.isFinite(value) && value >= 0,
+      );
 
     if (durations.length === 0) {
       return undefined;
@@ -112,7 +116,12 @@ export function AnalyticsPage({ env, api }: { env: AppEnv; api: ApiClient }) {
   }, [attestations, payments]);
 
   return (
-    <AppShell title="Analytics" subtitle="Aggregate stream and settlement metrics" env={env} api={api}>
+    <AppShell
+      title="Analytics"
+      subtitle="Aggregate stream and settlement metrics"
+      env={env}
+      api={api}
+    >
       <StatGrid>
         <StatCard>
           <StatLabel>Total Streams</StatLabel>
@@ -127,7 +136,9 @@ export function AnalyticsPage({ env, api }: { env: AppEnv; api: ApiClient }) {
         <StatCard>
           <StatLabel>Avg. Attestation → Paid</StatLabel>
           <StatValue>
-            {averageSettlementSeconds !== undefined ? formatDuration(averageSettlementSeconds) : '—'}
+            {averageSettlementSeconds !== undefined
+              ? formatDuration(averageSettlementSeconds)
+              : '—'}
           </StatValue>
         </StatCard>
         <StatCard>

@@ -26,15 +26,15 @@ describe('FraudService', () => {
     expect(result.score).toBe(10);
   });
 
-  it('does not flag a second submission from a different supplier using the first one\'s history', () => {
+  it("does not flag a second submission from a different supplier using the first one's history", () => {
     const service = new FraudService();
     service.check(input({ supplier: SUPPLIER }));
     const result = service.check(input({ supplier: OTHER_SUPPLIER }));
 
     expect(result.flagged).toBe(false);
-    expect(result.signals.some((signal) => signal.reason.includes('attestations from this supplier'))).toBe(
-      false,
-    );
+    expect(
+      result.signals.some((signal) => signal.reason.includes('attestations from this supplier')),
+    ).toBe(false);
   });
 
   it('flags repeated submissions from the same supplier within the rolling window', () => {
@@ -46,9 +46,9 @@ describe('FraudService', () => {
     service.check(input(), now + 2_000);
     const result = service.check(input(), now + 3_000);
 
-    expect(result.signals.some((signal) => signal.reason.includes('attestations from this supplier'))).toBe(
-      true,
-    );
+    expect(
+      result.signals.some((signal) => signal.reason.includes('attestations from this supplier')),
+    ).toBe(true);
   });
 
   it('ignores submissions outside the rolling window when counting frequency', () => {
@@ -60,9 +60,9 @@ describe('FraudService', () => {
     // Far outside the 1s window relative to the earlier calls.
     const result = service.check(input(), now + 10_000);
 
-    expect(result.signals.some((signal) => signal.reason.includes('attestations from this supplier'))).toBe(
-      false,
-    );
+    expect(
+      result.signals.some((signal) => signal.reason.includes('attestations from this supplier')),
+    ).toBe(false);
   });
 
   it('flags repeated claims of the same policy by the same supplier', () => {
@@ -84,7 +84,9 @@ describe('FraudService', () => {
     service.recordPayout(SUPPLIER, now + 2_000);
     const result = service.check(input(), now + 3_000);
 
-    expect(result.signals.some((signal) => signal.reason.includes('payouts to this supplier'))).toBe(true);
+    expect(
+      result.signals.some((signal) => signal.reason.includes('payouts to this supplier')),
+    ).toBe(true);
   });
 
   it('flags when the accumulated score reaches the configured threshold', () => {

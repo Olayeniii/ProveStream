@@ -164,7 +164,11 @@ export class Store {
     this.treasuryMode = mode;
   }
 
-  registerDestinationWallet(input: { supplier: Address; chain: string; address: Address }): DestinationWallet {
+  registerDestinationWallet(input: {
+    supplier: Address;
+    chain: string;
+    address: Address;
+  }): DestinationWallet {
     const record: DestinationWallet = { ...input, registeredAt: new Date().toISOString() };
     this.destinationWallets.set(input.supplier, record);
     return record;
@@ -234,8 +238,9 @@ export class Store {
       ).length,
       treasuryMode: this.treasuryMode,
       lastEventAt: this.lastEventAt,
-      pendingFraudAlerts: [...this.fraudAlerts.values()].filter((alert) => alert.status === 'flagged')
-        .length,
+      pendingFraudAlerts: [...this.fraudAlerts.values()].filter(
+        (alert) => alert.status === 'flagged',
+      ).length,
     };
   }
 }

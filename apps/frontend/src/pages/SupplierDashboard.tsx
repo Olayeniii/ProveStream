@@ -21,7 +21,9 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
   const [policies, setPolicies] = useState<PolicySummary[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [riskAnalyses, setRiskAnalyses] = useState<RiskAnalysis[]>([]);
-  const [destinationWallet, setDestinationWallet] = useState<DestinationWallet | undefined>(undefined);
+  const [destinationWallet, setDestinationWallet] = useState<DestinationWallet | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
     if (wallet.status !== 'ready' || !wallet.walletAddress) {
@@ -102,7 +104,11 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
       api={api}
       headerActions={
         wallet.status === 'ready' && wallet.walletAddress ? (
-          <WalletChip address={wallet.walletAddress} role="Supplier Wallet" onSignOut={wallet.logout} />
+          <WalletChip
+            address={wallet.walletAddress}
+            role="Supplier Wallet"
+            onSignOut={wallet.logout}
+          />
         ) : undefined
       }
     >
@@ -133,8 +139,8 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
         <Card>
           <SectionTitle>Destination wallet</SectionTitle>
           <HelperText>
-            Register a wallet on another chain to receive rewards there instead of on Arc — the agent
-            bridges canonical USDC to it via Circle CCTP.
+            Register a wallet on another chain to receive rewards there instead of on Arc — the
+            agent bridges canonical USDC to it via Circle CCTP.
           </HelperText>
           {destinationWallet ? (
             <StatRow>
@@ -149,7 +155,10 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
             </StatRow>
           ) : (
             <FormRow>
-              <Select value={destinationChain} onChange={(event) => setDestinationChain(event.target.value)}>
+              <Select
+                value={destinationChain}
+                onChange={(event) => setDestinationChain(event.target.value)}
+              >
                 {SUPPORTED_DESTINATION_CHAINS.map((chain) => (
                   <option key={chain} value={chain}>
                     {chain.replace('_', ' ')}

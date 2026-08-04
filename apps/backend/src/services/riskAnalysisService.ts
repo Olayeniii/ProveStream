@@ -48,7 +48,10 @@ function extractJson(text: string): unknown {
 export class RiskAnalysisService {
   constructor(private readonly config: RiskAnalysisServiceConfig) {}
 
-  async analyzeEvidence(input: { evidenceText: string; policyId: string }): Promise<RiskAnalysisResult> {
+  async analyzeEvidence(input: {
+    evidenceText: string;
+    policyId: string;
+  }): Promise<RiskAnalysisResult> {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${this.config.model}:generateContent?key=${this.config.apiKey}`,
       {

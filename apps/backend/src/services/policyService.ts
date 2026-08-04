@@ -77,9 +77,10 @@ export class PolicyService {
 
     const logs = [];
     for (let start = fromBlock; start <= latestBlock; start += LOG_SCAN_CHUNK_BLOCKS) {
-      const end = start + LOG_SCAN_CHUNK_BLOCKS - 1n > latestBlock
-        ? latestBlock
-        : start + LOG_SCAN_CHUNK_BLOCKS - 1n;
+      const end =
+        start + LOG_SCAN_CHUNK_BLOCKS - 1n > latestBlock
+          ? latestBlock
+          : start + LOG_SCAN_CHUNK_BLOCKS - 1n;
       const chunk = await this.client.getContractEvents({
         address: this.config.rewardPolicyAddress,
         abi: rewardPolicyAbi,
