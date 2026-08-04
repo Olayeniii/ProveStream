@@ -31,6 +31,7 @@ const MAX_RECORDS = 200;
  */
 export class Store {
   private readonly attestations: AttestationRecord[] = [];
+  private readonly attestationIds = new Set<string>();
   private readonly payments = new Map<string, Payment>();
   private readonly pendingEvidence = new Map<Hex, string>();
   private readonly riskAnalyses = new Map<string, RiskAnalysis>();
@@ -40,7 +41,17 @@ export class Store {
   private lastEventAt: string | undefined;
   private treasuryMode = 'local';
 
+  /**
+   * Idempotent by `id`: both the live watcher and `HistoryService`'s startup
+   * backfill can observe the same attestation in the small window where
+   * their block ranges overlap, and this makes calling it twice a no-op
+   * rather than a duplicate dashboard row.
+   */
   addAttestation(record: AttestationRecord): void {
+    if (this.attestationIds.has(record.id)) {
+      return;
+    }
+    this.attestationIds.add(record.id);
     this.attestations.unshift(record);
     this.attestations.length = Math.min(this.attestations.length, MAX_RECORDS);
     this.lastEventAt = new Date().toISOString();

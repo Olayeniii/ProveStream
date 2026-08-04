@@ -2,6 +2,8 @@ import { decodeCredentialType, rewardPolicyAbi } from '@provenance-streams/proto
 import type { Address } from 'viem';
 import { createPublicClient, http } from 'viem';
 
+import { withRpcRetries } from './rpcRetry.js';
+
 export interface PolicySummary {
   id: string;
   credentialType: string;
@@ -45,12 +47,14 @@ export class PolicyService {
 
     const policies = await Promise.all(
       ids.map(async (id) => {
-        const policy = await this.client.readContract({
-          address: this.config.rewardPolicyAddress,
-          abi: rewardPolicyAbi,
-          functionName: 'getPolicy',
-          args: [id],
-        });
+        const policy = await withRpcRetries(() =>
+          this.client.readContract({
+            address: this.config.rewardPolicyAddress,
+            abi: rewardPolicyAbi,
+            functionName: 'getPolicy',
+            args: [id],
+          }),
+        );
         return {
           id: policy.id.toString(),
           credentialType: decodeCredentialType(policy.credentialType),
@@ -73,7 +77,7 @@ export class PolicyService {
    */
   private async scanPolicyCreatedLogs() {
     const fromBlock = this.config.deployedAtBlock ?? 0n;
-    const latestBlock = await this.client.getBlockNumber();
+    const latestBlock = await withRpcRetries(() => this.client.getBlockNumber());
 
     const logs = [];
     for (let start = fromBlock; start <= latestBlock; start += LOG_SCAN_CHUNK_BLOCKS) {
@@ -81,13 +85,15 @@ export class PolicyService {
         start + LOG_SCAN_CHUNK_BLOCKS - 1n > latestBlock
           ? latestBlock
           : start + LOG_SCAN_CHUNK_BLOCKS - 1n;
-      const chunk = await this.client.getContractEvents({
-        address: this.config.rewardPolicyAddress,
-        abi: rewardPolicyAbi,
-        eventName: 'PolicyCreated',
-        fromBlock: start,
-        toBlock: end,
-      });
+      const chunk = await withRpcRetries(() =>
+        this.client.getContractEvents({
+          address: this.config.rewardPolicyAddress,
+          abi: rewardPolicyAbi,
+          eventName: 'PolicyCreated',
+          fromBlock: start,
+          toBlock: end,
+        }),
+      );
       logs.push(...chunk);
     }
     return logs;

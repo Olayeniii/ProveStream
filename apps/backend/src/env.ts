@@ -31,6 +31,8 @@ const serverConfigSchema = z.object({
   geminiApiKey: z.string().optional(),
   geminiModel: z.string().min(1).default('gemini-2.0-flash'),
   rewardPolicyDeployedAtBlock: z.coerce.bigint().default(0n),
+  attestationRegistryDeployedAtBlock: z.coerce.bigint().optional(),
+  rewardDispatcherDeployedAtBlock: z.coerce.bigint().optional(),
   fraudScoreThreshold: z.coerce.number().int().min(0).max(100).optional(),
 });
 
@@ -44,6 +46,10 @@ export interface ServerConfig {
   rewardDispatcherAddress: `0x${string}`;
   /** Block `RewardPolicy` was deployed at, so `PolicyService` doesn't scan from genesis. */
   rewardPolicyDeployedAtBlock: bigint;
+  /** Block `AttestationRegistry` was deployed at, for `HistoryService`'s backfill. Falls back to `rewardPolicyDeployedAtBlock` (Ignition deploys all three contracts in one run, blocks apart at most). */
+  attestationRegistryDeployedAtBlock: bigint;
+  /** Block `RewardDispatcher` was deployed at, for `HistoryService`'s backfill. Same fallback as above. */
+  rewardDispatcherDeployedAtBlock: bigint;
   /** Full agent config, ready to pass to `runAgent`. */
   agentConfig: AgentConfigInput;
   /** Present only when the full Circle credential set is configured for the treasury DCW. */
@@ -93,6 +99,8 @@ export function loadServerConfig(): ServerConfig {
     geminiApiKey: process.env.GEMINI_API_KEY,
     geminiModel: process.env.GEMINI_MODEL,
     rewardPolicyDeployedAtBlock: process.env.REWARD_POLICY_DEPLOYED_AT_BLOCK,
+    attestationRegistryDeployedAtBlock: process.env.ATTESTATION_REGISTRY_DEPLOYED_AT_BLOCK,
+    rewardDispatcherDeployedAtBlock: process.env.REWARD_DISPATCHER_DEPLOYED_AT_BLOCK,
     fraudScoreThreshold: process.env.FRAUD_SCORE_THRESHOLD,
   });
 
@@ -120,6 +128,9 @@ export function loadServerConfig(): ServerConfig {
     rewardPolicyAddress: raw.rewardPolicyAddress,
     rewardDispatcherAddress: raw.rewardDispatcherAddress,
     rewardPolicyDeployedAtBlock: raw.rewardPolicyDeployedAtBlock,
+    attestationRegistryDeployedAtBlock:
+      raw.attestationRegistryDeployedAtBlock ?? raw.rewardPolicyDeployedAtBlock,
+    rewardDispatcherDeployedAtBlock: raw.rewardDispatcherDeployedAtBlock ?? raw.rewardPolicyDeployedAtBlock,
     agentConfig: {
       rpcUrl: raw.rpcUrl,
       chainId: raw.chainId,
