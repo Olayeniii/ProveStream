@@ -136,3 +136,73 @@ wallet infrastructure throughout; it's honest scoping given the added
 complexity of the full OTP dance, not a shortcut disguised as the real
 thing. Passkey support (explicitly "if available" per spec) is deferred for
 the same reason.
+
+## Milestone 3
+
+### Fraud scoring is rule-based and separate from the Gemini risk analysis
+
+`FraudService` scores structured, agent-observed data (submission
+frequency, payout frequency, policy-pair reuse, first-time-supplier) — a
+different signal from `apps/backend`'s `riskAnalysisService.ts`, which reads
+the auditor's free-text evidence via Gemini. They're deliberately not
+merged: one needs no external API and can never go "unavailable" (unlike
+Gemini, whose failure mode is already handled by falling back to
+`unavailable` in the Streams view), and a rule-based check is auditable in a
+way an LLM's judgment isn't — useful properties for something that gates a
+real payout, not just an informational panel. Duplicate proof hashes are
+deliberately *not* re-checked here: `AttestationRegistry` already rejects
+them on-chain (`DuplicateProofHash`), so a real duplicate can never reach
+this service's `check()` in the first place — re-scoring it would just be
+dead code exercised by an unreachable input.
+
+### The settlement queue doesn't classify errors as recoverable vs. permanent
+
+`SettlementQueue.runWithRetries` retries every failure the same way up to
+`maxAttempts`, rather than trying to distinguish "worth retrying" (an RPC
+hiccup, a bridge timeout) from "hopeless" (an invalid recipient address) up
+front. This is a deliberate simplification: a transient error succeeds on
+retry either way, and a permanent one simply exhausts its attempts and lands
+in `failed` — the correct terminal state regardless of *why* it failed.
+Building a real error taxonomy would add complexity without changing either
+outcome at this scale.
+
+### `AgentControl.approvePayout` reuses the automatic settlement path exactly
+
+When an admin approves a fraud-flagged payout, the backend doesn't
+re-implement "send the payment" — `runAgent()`'s returned `AgentControl`
+exposes `approvePayout()`, which calls the *same* internal
+`enqueueSettlement()` closure the automatic `RewardEligible` handler uses
+(same-chain-or-bridge decision, same retry queue, same `onPaymentSettled`
+hook). The only difference is that the fraud check itself is skipped, since
+a human already made that call. This guarantees the manual and automatic
+paths can never drift apart in behavior — there's only one settlement
+implementation, with two entry points.
+
+### The bridge always uses the forwarder destination, never a destination-side adapter
+
+`BridgeService.bridgeToDestination()` calls App Kit's `bridge()` with
+`to: { recipientAddress, useForwarder: true }` and no destination adapter,
+because the destination is a supplier's own wallet — a keypair this agent
+never has access to and shouldn't need. `useForwarder: true` tells Circle's
+Orbit relayer to submit the destination-chain mint on the recipient's
+behalf once the CCTP attestation is ready, so the agent only ever needs to
+sign the source-chain burn.
+
+### New embedded wallets are `SCA`; existing `EOA` wallets are never migrated
+
+Circle Gas Station sponsorship requires a Smart Contract Account wallet.
+Retroactively migrating existing `EOA` wallets to `SCA` would mean either a
+new address (breaking anything referencing the old one, e.g. registered
+destination-wallet lookups keyed by supplier address) or an in-place
+account-type change with its own risk. Since this is purely additive —
+new logins get gas sponsorship, existing ones just keep paying their own
+gas as before — there's no forced-migration tradeoff to make.
+
+### `SUPPORTED_DESTINATION_CHAINS` lives in `packages/protocol`, not `agent`
+
+It started in `agent/src/wallet/destinationWallet.ts`, but the frontend's
+destination-wallet form needs the same list for its chain dropdown. Rather
+than import the whole `agent` package into the browser bundle (which would
+pull in Node-only Circle SDK dependencies), the constant moved to
+`packages/protocol` — already a dependency of all three apps — and `agent`
+re-exports it for backward compatibility with existing imports.

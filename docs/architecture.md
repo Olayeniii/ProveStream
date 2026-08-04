@@ -76,7 +76,16 @@ change is a one-file update, not a hunt across three apps. It also exports:
   `"ISO-9001-AUDIT"`) into the `bytes32` `RewardPolicy.credentialType` field
   and back, so the Admin Dashboard can work with readable strings.
 - `Payment` — the settlement record shape shared between the backend's
-  `/api/payments` endpoint and the frontend's Supplier/Admin dashboards.
+  `/api/payments` endpoint and the frontend's Supplier/Admin dashboards. Now
+  carries optional `bridged` / `destinationChain` / `destinationTxHash`
+  fields for cross-chain settlements.
+- `DestinationWallet`, `FraudAlert`, `SettlementJobRecord`, `AgentHealth` —
+  the read models behind `/api/destination-wallet`, `/api/fraud-alerts`,
+  `/api/settlement-queue`, and `/api/agent-health`.
+- `SUPPORTED_DESTINATION_CHAINS` (`destinationChains.ts`) — the single list
+  of chains this deployment can bridge to, shared by the agent's
+  `validateDestinationWallet()`, the backend's registration endpoint, and
+  the frontend's destination-wallet form.
 
 ### `agent`
 
@@ -133,24 +142,35 @@ Milestone 1's `logger.ts` be swapped without touching `watcher.ts`.
 
 ### `apps/backend`
 
-Now a small Express API, not just a process wrapper:
+An Express API that also runs the agent process:
 
 - `main.ts` — loads `.env`, builds the `Store`, `TreasuryService`,
   `PolicyService`, and (if Circle credentials are set) `WalletService`,
-  starts the agent, and starts the HTTP server.
-- `store.ts` — in-memory read models for attestations and payments,
-  populated by the agent's hooks. A deliberate demo-scale stand-in for a
-  database: swapping it for one only touches this file.
+  starts the agent via `runAgent()`, and starts the HTTP server. Also wires
+  `runAgent`'s new hooks: `onFraudFlagged` creates a `Store` fraud-alert
+  record, `onQueueStateChange` mirrors settlement-job state, and
+  `getDestinationWallet` answers the agent's cross-chain routing question
+  from the `Store`'s registered destination wallets.
+- `store.ts` — in-memory read models for attestations, payments,
+  destination wallets, fraud alerts, settlement-job state, and an
+  agent-health snapshot, populated by the agent's hooks. A deliberate
+  demo-scale stand-in for a database: swapping it for one only touches this
+  file.
 - `services/policyService.ts` — reads `RewardPolicy` for the Admin
   Dashboard. Since the contract only exposes `getPolicy(id)` (per spec),
   this replays `PolicyCreated` events to discover known ids, then re-reads
   each one's current state.
 - `services/walletService.ts` — brokers Circle User-Controlled Wallets: user
-  sessions, wallet-creation challenges, and contract-execution challenges
-  (for attestation submission), all requiring the API key this server holds
-  and the frontend never sees.
-- `server.ts` — the Express app: dashboard read routes plus
-  `/api/wallet-sessions/*` for the embedded-wallet flow.
+  sessions, wallet-creation challenges (now `accountType: 'SCA'` for Gas
+  Station eligibility), and contract-execution challenges (for attestation
+  submission), all requiring the API key this server holds and the frontend
+  never sees.
+- `server.ts` — the Express app: dashboard read routes,
+  `/api/wallet-sessions/*` for the embedded-wallet flow, and the new
+  `/api/destination-wallet`, `/api/fraud-alerts` (+ `/approve`/`/reject`),
+  `/api/settlement-queue`, and `/api/agent-health` routes. Approving a fraud
+  alert calls `agentControl.approvePayout()` — the same manual-settlement
+  path described in the `agent` section above.
 
 ### `apps/frontend`
 
@@ -169,8 +189,17 @@ routed with `react-router-dom` into three dashboards (`AuditorDashboard`,
   `submitAttestation()` that also goes through a Circle challenge (so the
   attestation transaction is signed by the embedded wallet, not by this
   server).
-- `lib/api.ts` — the one place that talks to `apps/backend`'s HTTP API.
+- `lib/api.ts` — the one place that talks to `apps/backend`'s HTTP API,
+  including the new destination-wallet, fraud-alert, settlement-queue, and
+  agent-health calls.
+- `lib/streams.ts` — merges the backend's independent read models into one
+  "stream" per attestation. The `supplier-paid` node now reports bridge
+  status (destination chain + tx hash) when a payout settled cross-chain,
+  same honest-data discipline as the AI Risk Analysis node: real state only,
+  `unavailable`/default detail otherwise, never invented.
 
 Both wallet flows are deliberately isolated behind their own module so a
-later swap (Arc App Kit for the embedded side, Circle CCTP for payouts)
-touches one file each, not the dashboards built on top of them.
+later swap (Arc App Kit for the embedded side) touches one file, not the
+dashboards built on top of them. Cross-chain settlement itself is
+`agent/src/services/bridgeService.ts`, on the backend side — the frontend
+only ever reads its result off `Payment`.

@@ -116,9 +116,10 @@ describe('SettlementQueue', () => {
     const jobB = new Promise<void>((resolve) => {
       queue.enqueue({
         id: 'y',
-        execute: async () => {
+        execute: () => {
           order.push('y-start');
           resolve();
+          return Promise.resolve();
         },
       });
     });
