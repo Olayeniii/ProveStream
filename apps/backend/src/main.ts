@@ -2,6 +2,7 @@ import { createTreasuryService, parseAgentConfig, runAgent } from '@provenance-s
 
 import { loadServerConfig } from './env.js';
 import { createAttestationReader } from './services/attestationReader.js';
+import { HistoryService } from './services/historyService.js';
 import { PolicyService } from './services/policyService.js';
 import { RiskAnalysisService } from './services/riskAnalysisService.js';
 import { WalletService } from './services/walletService.js';
@@ -14,7 +15,7 @@ try {
   // No .env file present; fall back to whatever is already in process.env.
 }
 
-try {
+async function main(): Promise<void> {
   const config = loadServerConfig();
   const agentConfig = parseAgentConfig(config.agentConfig);
   const store = new Store();
@@ -42,6 +43,46 @@ try {
     rpcUrl: config.rpcUrl,
     attestationRegistryAddress: config.attestationRegistryAddress,
   });
+
+  // Populate the in-memory Store from chain history before starting the live
+  // watchers below, so a backend restart doesn't lose everything it already
+  // observed. Deliberately read-only — see `HistoryService`'s docstring for
+  // why it must never re-enter the fraud/settlement pipeline, and awaited
+  // here (not fire-and-forget) so its block-number snapshot is guaranteed to
+  // predate `runAgent`'s live subscriptions below, closing the only realistic
+  // window where the two could otherwise observe the same event twice.
+  const historyService = new HistoryService({
+    rpcUrl: config.rpcUrl,
+    attestationRegistryAddress: config.attestationRegistryAddress,
+    rewardDispatcherAddress: config.rewardDispatcherAddress,
+    attestationRegistryDeployedAtBlock: config.attestationRegistryDeployedAtBlock,
+    rewardDispatcherDeployedAtBlock: config.rewardDispatcherDeployedAtBlock,
+  });
+  const [historicalAttestations, historicalRewards] = await Promise.all([
+    historyService.listHistoricalAttestations().catch((error: unknown) => {
+      console.error('Failed to backfill attestation history:', error);
+      return [];
+    }),
+    historyService.listHistoricalRewards().catch((error: unknown) => {
+      console.error('Failed to backfill reward history:', error);
+      return [];
+    }),
+  ]);
+  for (const attestation of historicalAttestations) {
+    store.addAttestation(attestation);
+  }
+  for (const reward of historicalRewards) {
+    store.createPendingPayment({
+      rewardId: reward.rewardId,
+      attestationId: reward.attestationId ?? 'unknown',
+      supplier: reward.supplier,
+      policyId: reward.policyId,
+      rewardAmount: reward.rewardAmount,
+    });
+  }
+  console.log(
+    `Backfilled ${historicalAttestations.length.toString()} attestation(s) and ${historicalRewards.length.toString()} reward(s) from chain history.`,
+  );
 
   const agentControl = runAgent(config.agentConfig, {
     onAttestation: (attestation) => {
@@ -162,7 +203,9 @@ try {
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
-} catch (error) {
+}
+
+main().catch((error: unknown) => {
   console.error('Failed to start backend: invalid configuration.\n', error);
   process.exitCode = 1;
-}
+});

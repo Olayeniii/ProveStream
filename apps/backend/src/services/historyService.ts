@@ -66,7 +66,11 @@ export class HistoryService {
 
     const attestations: HistoricalAttestation[] = [];
     for (const log of logs) {
-      if (log.args.id === undefined || log.args.supplier === undefined || log.args.auditor === undefined) {
+      if (
+        log.args.id === undefined ||
+        log.args.supplier === undefined ||
+        log.args.auditor === undefined
+      ) {
         continue;
       }
       attestations.push({
@@ -86,7 +90,11 @@ export class HistoryService {
 
     const rewards: HistoricalReward[] = [];
     for (const log of logs) {
-      if (log.args.rewardId === undefined || log.args.supplier === undefined || log.args.rewardAmount === undefined) {
+      if (
+        log.args.rewardId === undefined ||
+        log.args.supplier === undefined ||
+        log.args.rewardAmount === undefined
+      ) {
         continue;
       }
       rewards.push({
@@ -132,7 +140,9 @@ export class HistoryService {
       start += LOG_SCAN_CHUNK_BLOCKS
     ) {
       const end =
-        start + LOG_SCAN_CHUNK_BLOCKS - 1n > latestBlock ? latestBlock : start + LOG_SCAN_CHUNK_BLOCKS - 1n;
+        start + LOG_SCAN_CHUNK_BLOCKS - 1n > latestBlock
+          ? latestBlock
+          : start + LOG_SCAN_CHUNK_BLOCKS - 1n;
       const chunk = await withRpcRetries(() =>
         this.client.getContractEvents({
           address: this.config.attestationRegistryAddress,
@@ -156,7 +166,9 @@ export class HistoryService {
       start += LOG_SCAN_CHUNK_BLOCKS
     ) {
       const end =
-        start + LOG_SCAN_CHUNK_BLOCKS - 1n > latestBlock ? latestBlock : start + LOG_SCAN_CHUNK_BLOCKS - 1n;
+        start + LOG_SCAN_CHUNK_BLOCKS - 1n > latestBlock
+          ? latestBlock
+          : start + LOG_SCAN_CHUNK_BLOCKS - 1n;
       const chunk = await withRpcRetries(() =>
         this.client.getContractEvents({
           address: this.config.rewardDispatcherAddress,

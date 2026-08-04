@@ -130,7 +130,8 @@ export function loadServerConfig(): ServerConfig {
     rewardPolicyDeployedAtBlock: raw.rewardPolicyDeployedAtBlock,
     attestationRegistryDeployedAtBlock:
       raw.attestationRegistryDeployedAtBlock ?? raw.rewardPolicyDeployedAtBlock,
-    rewardDispatcherDeployedAtBlock: raw.rewardDispatcherDeployedAtBlock ?? raw.rewardPolicyDeployedAtBlock,
+    rewardDispatcherDeployedAtBlock:
+      raw.rewardDispatcherDeployedAtBlock ?? raw.rewardPolicyDeployedAtBlock,
     agentConfig: {
       rpcUrl: raw.rpcUrl,
       chainId: raw.chainId,
