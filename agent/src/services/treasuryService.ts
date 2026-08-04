@@ -3,9 +3,9 @@ import type { TokenBlockchain } from '@circle-fin/developer-controlled-wallets';
 import type { Address, Hex } from 'viem';
 import { formatEther, formatUnits } from 'viem';
 
-import type { ChainConfig } from './chainClient.js';
-import { createAgentPublicClient, createAgentWalletClient } from './chainClient.js';
-import type { TreasuryConfig } from './config.js';
+import type { ChainConfig } from '../chainClient.js';
+import { createAgentPublicClient, createAgentWalletClient } from '../chainClient.js';
+import type { TreasuryConfig } from '../config.js';
 
 export interface TreasuryBalance {
   amount: string;
@@ -34,6 +34,8 @@ export interface SendRewardResult {
 export interface TreasuryService {
   getBalance(): Promise<TreasuryBalance>;
   sendReward(input: SendRewardInput): Promise<SendRewardResult>;
+  /** The treasury's own on-chain address — used by `bridgeService.ts` as the CCTP source. */
+  getAddress(): Promise<Address>;
 }
 
 /**
@@ -57,7 +59,7 @@ class CircleTreasuryService implements TreasuryService {
    * only accepts a `blockchain` (needed to select the native USDC asset) alongside
    * `walletAddress`, not `walletId` — see the SDK's `CreateTransferTransactionInput`.
    */
-  private async getWalletAddress(): Promise<Address> {
+  async getAddress(): Promise<Address> {
     if (this.walletAddress) {
       return this.walletAddress;
     }
@@ -79,7 +81,7 @@ class CircleTreasuryService implements TreasuryService {
   }
 
   async sendReward({ supplier, amount, rewardId }: SendRewardInput): Promise<SendRewardResult> {
-    const walletAddress = await this.getWalletAddress();
+    const walletAddress = await this.getAddress();
 
     const created = await this.client.createTransaction({
       walletAddress,
@@ -120,6 +122,10 @@ class LocalTreasuryService implements TreasuryService {
       address: this.walletClient.account.address,
     });
     return { amount: formatEther(balance), symbol: 'USDC (local demo)' };
+  }
+
+  async getAddress(): Promise<Address> {
+    return this.walletClient.account.address;
   }
 
   async sendReward({ supplier, amount }: SendRewardInput): Promise<SendRewardResult> {

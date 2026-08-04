@@ -9,7 +9,7 @@ import { type AgentConfigInput, parseAgentConfig } from './config.js';
 import { dispatchRewardOnChain, watchRewardEligible } from './dispatcher.js';
 import { createLogger } from './logger.js';
 import { evaluateReward } from './rewardEngine.js';
-import { createTreasuryService } from './treasuryService.js';
+import { createTreasuryService } from './services/treasuryService.js';
 import { watchAttestations } from './watcher.js';
 
 export { parseAgentConfig } from './config.js';
@@ -22,8 +22,8 @@ export type {
   TreasuryService,
   SendRewardInput,
   SendRewardResult,
-} from './treasuryService.js';
-export { createTreasuryService } from './treasuryService.js';
+} from './services/treasuryService.js';
+export { createTreasuryService } from './services/treasuryService.js';
 export type { StopWatcher } from './chainClient.js';
 export type { AttestationSubmittedHandler } from './watcher.js';
 export type { RewardEligibleHandler } from './dispatcher.js';
