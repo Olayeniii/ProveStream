@@ -24,7 +24,7 @@ export function App() {
       <GlobalStyle />
       <Router>
         <Routes>
-          <Route path="/" element={<LandingPage />} />
+          <Route path="/" element={<LandingPage env={env} api={api} />} />
           <Route path="/streams" element={<StreamsOverview env={env} api={api} />} />
           <Route path="/auditor" element={<AuditorDashboard env={env} api={api} />} />
           <Route path="/supplier" element={<SupplierDashboard env={env} api={api} />} />
