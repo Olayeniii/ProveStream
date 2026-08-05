@@ -1,4 +1,5 @@
 import { createTreasuryService, parseAgentConfig, runAgent } from '@provenance-streams/agent';
+import type { Address, Hex } from 'viem';
 
 import { loadServerConfig } from './env.js';
 import { createAttestationReader } from './services/attestationReader.js';
@@ -94,6 +95,33 @@ async function main(): Promise<void> {
   });
   const signatureVerificationService = new SignatureVerificationService({ rpcUrl: config.rpcUrl });
 
+  /**
+   * Independently verifies who signed `transactionHash` and records whether
+   * it matches `auditor` — shared by the live `onAttestation` hook, the
+   * history backfill, and the "fill in what a restored snapshot doesn't
+   * have" pass below, so all three go through identical logic.
+   */
+  function verifyAttestationSignature(
+    attestationId: string,
+    transactionHash: Hex,
+    auditor: Address,
+  ): void {
+    store.createPendingSignatureVerification(attestationId);
+    signatureVerificationService
+      .verifySignature(transactionHash)
+      .then(({ signerAddress }) => {
+        store.updateSignatureVerificationStatus(attestationId, 'complete', {
+          signerAddress,
+          verified: signerAddress.toLowerCase() === auditor.toLowerCase(),
+        });
+      })
+      .catch((error: unknown) => {
+        store.updateSignatureVerificationStatus(attestationId, 'failed', {
+          error: error instanceof Error ? error.message : 'Signature verification failed.',
+        });
+      });
+  }
+
   // Populate the Store from chain history before starting the live watchers
   // below, so a backend restart doesn't lose everything it already observed.
   // Deliberately read-only — see `HistoryService`'s docstring for why it
@@ -136,23 +164,19 @@ async function main(): Promise<void> {
   });
   for (const attestation of attestationBackfill.attestations) {
     store.addAttestation(attestation);
-
     // Unlike risk analysis, signature verification needs nothing that isn't
     // already on-chain — it can be (and is) redone for backfilled history too.
-    store.createPendingSignatureVerification(attestation.id);
-    signatureVerificationService
-      .verifySignature(attestation.transactionHash)
-      .then(({ signerAddress }) => {
-        store.updateSignatureVerificationStatus(attestation.id, 'complete', {
-          signerAddress,
-          verified: signerAddress.toLowerCase() === attestation.auditor.toLowerCase(),
-        });
-      })
-      .catch((error: unknown) => {
-        store.updateSignatureVerificationStatus(attestation.id, 'failed', {
-          error: error instanceof Error ? error.message : 'Signature verification failed.',
-        });
-      });
+    verifyAttestationSignature(attestation.id, attestation.transactionHash, attestation.auditor);
+  }
+
+  // A restored snapshot's attestations (see `store.restore` above) don't carry
+  // a signature-verification result — that was never persisted, since it's
+  // cheaply re-derivable — so fill those in too. Attestations the backfill
+  // loop just handled already have a pending/complete record and are skipped.
+  for (const attestation of store.listAttestations()) {
+    if (!store.getSignatureVerification(attestation.id)) {
+      verifyAttestationSignature(attestation.id, attestation.transactionHash, attestation.auditor);
+    }
   }
   for (const reward of rewardBackfill.rewards) {
     store.createPendingPayment({
@@ -208,22 +232,10 @@ async function main(): Promise<void> {
         auditor,
         policyId: (attestation.policyId ?? 0n).toString(),
         observedAt: new Date().toISOString(),
+        transactionHash: context.transactionHash,
       });
 
-      store.createPendingSignatureVerification(attestationId);
-      signatureVerificationService
-        .verifySignature(context.transactionHash)
-        .then(({ signerAddress }) => {
-          store.updateSignatureVerificationStatus(attestationId, 'complete', {
-            signerAddress,
-            verified: signerAddress.toLowerCase() === auditor.toLowerCase(),
-          });
-        })
-        .catch((error: unknown) => {
-          store.updateSignatureVerificationStatus(attestationId, 'failed', {
-            error: error instanceof Error ? error.message : 'Signature verification failed.',
-          });
-        });
+      verifyAttestationSignature(attestationId, context.transactionHash, auditor);
 
       if (!riskAnalysisService) {
         return;

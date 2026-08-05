@@ -1,6 +1,8 @@
 import type { Address, Hex } from 'viem';
 import { createPublicClient, http, recoverTransactionAddress, serializeTransaction } from 'viem';
 
+import { withRpcRetries } from './rpcRetry.js';
+
 export interface SignatureVerificationServiceConfig {
   rpcUrl: string;
 }
@@ -31,7 +33,7 @@ export class SignatureVerificationService {
   }
 
   async verifySignature(transactionHash: Hex): Promise<SignatureVerificationResult> {
-    const tx = await this.client.getTransaction({ hash: transactionHash });
+    const tx = await withRpcRetries(() => this.client.getTransaction({ hash: transactionHash }));
 
     if (tx.type === 'eip1559') {
       const serializedTransaction = serializeTransaction(

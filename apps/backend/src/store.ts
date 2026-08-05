@@ -20,6 +20,8 @@ export interface AttestationRecord {
   auditor: Address;
   policyId: string;
   observedAt: string;
+  /** The `submitAttestation` transaction that produced this record — kept so a restart can (re-)run signature verification without needing a fresh chain scan. */
+  transactionHash: Hex;
 }
 
 const MAX_RECORDS = 200;
@@ -213,6 +215,10 @@ export class Store {
     if (extra?.error) {
       record.error = extra.error;
     }
+  }
+
+  getSignatureVerification(attestationId: string): SignatureVerification | undefined {
+    return this.signatureVerifications.get(attestationId);
   }
 
   listSignatureVerifications(): SignatureVerification[] {
