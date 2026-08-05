@@ -88,6 +88,10 @@ export function createServer(deps: ServerDependencies): Express {
     res.json(deps.store.listRiskAnalyses());
   });
 
+  app.get('/api/signature-verifications', (_req, res) => {
+    res.json(deps.store.listSignatureVerifications());
+  });
+
   app.post('/api/destination-wallet', (req, res) => {
     const body = destinationWalletBodySchema.safeParse(req.body);
     if (!body.success) {

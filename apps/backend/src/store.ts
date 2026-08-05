@@ -9,6 +9,8 @@ import type {
   RiskAnalysisStatus,
   SettlementJobRecord,
   SettlementJobState,
+  SignatureVerification,
+  SignatureVerificationStatus,
 } from '@provenance-streams/protocol';
 import type { Address, Hex } from 'viem';
 
@@ -35,6 +37,7 @@ export class Store {
   private readonly payments = new Map<string, Payment>();
   private readonly pendingEvidence = new Map<Hex, string>();
   private readonly riskAnalyses = new Map<string, RiskAnalysis>();
+  private readonly signatureVerifications = new Map<string, SignatureVerification>();
   private readonly destinationWallets = new Map<Address, DestinationWallet>();
   private readonly fraudAlerts = new Map<string, FraudAlert>();
   private readonly settlementJobs = new Map<string, SettlementJobRecord>();
@@ -178,6 +181,42 @@ export class Store {
 
   listRiskAnalyses(): RiskAnalysis[] {
     return [...this.riskAnalyses.values()];
+  }
+
+  createPendingSignatureVerification(attestationId: string): void {
+    const now = new Date().toISOString();
+    this.signatureVerifications.set(attestationId, {
+      attestationId,
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  updateSignatureVerificationStatus(
+    attestationId: string,
+    status: SignatureVerificationStatus,
+    extra?: { signerAddress?: Address; verified?: boolean; error?: string },
+  ): void {
+    const record = this.signatureVerifications.get(attestationId);
+    if (!record) {
+      return;
+    }
+    record.status = status;
+    record.updatedAt = new Date().toISOString();
+    if (extra?.signerAddress) {
+      record.signerAddress = extra.signerAddress;
+    }
+    if (extra?.verified !== undefined) {
+      record.verified = extra.verified;
+    }
+    if (extra?.error) {
+      record.error = extra.error;
+    }
+  }
+
+  listSignatureVerifications(): SignatureVerification[] {
+    return [...this.signatureVerifications.values()];
   }
 
   setTreasuryMode(mode: string): void {

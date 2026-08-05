@@ -5,6 +5,7 @@ import type {
   Payment,
   RiskAnalysis,
   SettlementJobRecord,
+  SignatureVerification,
 } from '@provenance-streams/protocol';
 
 export interface TreasuryBalance {
@@ -80,6 +81,8 @@ export function createApiClient(baseUrl: string) {
     listAttestations: () => request<AttestationRecord[]>(baseUrl, '/api/attestations'),
     listPayments: () => request<Payment[]>(baseUrl, '/api/payments'),
     listRiskAnalyses: () => request<RiskAnalysis[]>(baseUrl, '/api/risk-analyses'),
+    listSignatureVerifications: () =>
+      request<SignatureVerification[]>(baseUrl, '/api/signature-verifications'),
 
     registerDestinationWallet: (input: { supplier: string; chain: string; address: string }) =>
       request<DestinationWallet>(baseUrl, '/api/destination-wallet', {

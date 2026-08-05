@@ -24,6 +24,7 @@ export interface HistoricalAttestation {
   auditor: Address;
   policyId: string;
   observedAt: string;
+  transactionHash: Hex;
 }
 
 export interface HistoricalReward {
@@ -118,6 +119,7 @@ export class HistoryService {
         id: log.args.id.toString(),
         supplier: log.args.supplier,
         auditor: log.args.auditor,
+        transactionHash: log.transactionHash,
         policyId: (log.args.policyId ?? 0n).toString(),
         observedAt: blockTimestamps.get(log.blockNumber) ?? new Date().toISOString(),
       });

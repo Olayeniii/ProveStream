@@ -96,6 +96,28 @@ export interface RiskAnalysis {
   updatedAt: string;
 }
 
+/** Lifecycle status of independently verifying an attestation transaction's signature. */
+export type SignatureVerificationStatus = 'pending' | 'complete' | 'failed';
+
+/**
+ * Independent cryptographic verification that the address `AttestationRegistry`
+ * recorded as `auditor` is the one that actually signed the `submitAttestation`
+ * transaction — recovered from the transaction's own signature (`recoverTransactionAddress`),
+ * not just trusted from what the RPC reports as `from`. Exposed via
+ * `/api/signature-verifications`.
+ */
+export interface SignatureVerification {
+  attestationId: string;
+  status: SignatureVerificationStatus;
+  /** The address independently recovered from the transaction's signature. Only present once `status` is `complete`. */
+  signerAddress?: Address;
+  /** True once `signerAddress` is confirmed to equal the attestation's on-chain `auditor` field. Only present once `status` is `complete`. */
+  verified?: boolean;
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** A supplier's registered off-chain preference for cross-chain settlement. */
 export interface DestinationWallet {
   supplier: Address;

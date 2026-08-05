@@ -15,6 +15,7 @@ import { FraudService } from './services/fraudService.js';
 import type { JobState } from './services/settlementQueue.js';
 import { SettlementQueue } from './services/settlementQueue.js';
 import { createTreasuryService } from './services/treasuryService.js';
+import type { AttestationSubmittedContext } from './watcher.js';
 import { watchAttestations } from './watcher.js';
 
 export { parseAgentConfig } from './config.js';
@@ -45,7 +46,7 @@ export {
   validateDestinationWallet,
 } from './wallet/destinationWallet.js';
 export type { StopWatcher } from './chainClient.js';
-export type { AttestationSubmittedHandler } from './watcher.js';
+export type { AttestationSubmittedContext, AttestationSubmittedHandler } from './watcher.js';
 export type { RewardEligibleHandler } from './dispatcher.js';
 
 const logger = createLogger('agent');
@@ -72,7 +73,10 @@ export interface DestinationWalletLookup {
 
 export interface RunAgentHooks {
   /** Called whenever an `AttestationSubmitted` event is observed. */
-  onAttestation?: (attestation: AttestationSubmittedEventArgs) => void;
+  onAttestation?: (
+    attestation: AttestationSubmittedEventArgs,
+    context: AttestationSubmittedContext,
+  ) => void;
   /** Called whenever a `RewardEligible` event is observed. */
   onRewardEligible?: (reward: RewardEligibleEventArgs, context: RewardEligibleContext) => void;
   /** Called once the settlement payment for `rewardId` finishes, one way or another. */
@@ -173,14 +177,14 @@ export function runAgent(configInput: AgentConfigInput, hooks: RunAgentHooks = {
     treasuryMode: config.treasury.mode,
   });
 
-  const stopAttestationWatcher = watchAttestations(config, (attestation) => {
+  const stopAttestationWatcher = watchAttestations(config, (attestation, context) => {
     logger.info('Attestation submitted', {
       id: attestation.id?.toString(),
       supplier: attestation.supplier,
       auditor: attestation.auditor,
       policyId: attestation.policyId?.toString(),
     });
-    hooks.onAttestation?.(attestation);
+    hooks.onAttestation?.(attestation, context);
 
     const decision = evaluateReward(attestation);
     if (!decision.eligible) {

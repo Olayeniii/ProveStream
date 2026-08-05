@@ -180,7 +180,6 @@ const GaugeCaption = styled.span<{ $tone: 'positive' | 'warning' | 'negative' }>
     props.$tone === 'positive' ? '#166534' : props.$tone === 'warning' ? '#92400E' : '#9A3412'};
 `;
 
-
 const Summary = styled.p`
   margin: 0;
   font-size: 0.82rem;

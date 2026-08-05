@@ -13,13 +13,14 @@ import { StreamTimeline } from '../components/pipeline/StreamTimeline.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
 import { buildStreams } from '../lib/streams.js';
-import type { Payment, RiskAnalysis } from '@provenance-streams/protocol';
+import type { Payment, RiskAnalysis, SignatureVerification } from '@provenance-streams/protocol';
 
 export function StreamsOverview({ env, api }: { env: AppEnv; api: ApiClient }) {
   const [attestations, setAttestations] = useState<AttestationRecord[]>([]);
   const [policies, setPolicies] = useState<PolicySummary[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [riskAnalyses, setRiskAnalyses] = useState<RiskAnalysis[]>([]);
+  const [signatureVerifications, setSignatureVerifications] = useState<SignatureVerification[]>([]);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
@@ -39,11 +40,15 @@ export function StreamsOverview({ env, api }: { env: AppEnv; api: ApiClient }) {
       .listRiskAnalyses()
       .then(setRiskAnalyses)
       .catch(() => undefined);
+    api
+      .listSignatureVerifications()
+      .then(setSignatureVerifications)
+      .catch(() => undefined);
   }, [api]);
 
   const streams = useMemo(
-    () => buildStreams(attestations, policies, payments, riskAnalyses),
-    [attestations, policies, payments, riskAnalyses],
+    () => buildStreams(attestations, policies, payments, riskAnalyses, signatureVerifications),
+    [attestations, policies, payments, riskAnalyses, signatureVerifications],
   );
 
   const selected = streams.find((stream) => stream.id === selectedId) ?? streams[0];

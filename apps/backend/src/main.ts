@@ -10,6 +10,7 @@ import {
   RiskAnalysisService,
 } from './services/riskAnalysisService.js';
 import type { RiskAnalysisProvider } from './services/riskAnalysisService.js';
+import { SignatureVerificationService } from './services/signatureVerificationService.js';
 import { loadSnapshot, saveSnapshot } from './services/snapshotStore.js';
 import { WalletService } from './services/walletService.js';
 import { createServer } from './server.js';
@@ -91,6 +92,7 @@ async function main(): Promise<void> {
     rpcUrl: config.rpcUrl,
     attestationRegistryAddress: config.attestationRegistryAddress,
   });
+  const signatureVerificationService = new SignatureVerificationService({ rpcUrl: config.rpcUrl });
 
   // Populate the Store from chain history before starting the live watchers
   // below, so a backend restart doesn't lose everything it already observed.
@@ -134,6 +136,23 @@ async function main(): Promise<void> {
   });
   for (const attestation of attestationBackfill.attestations) {
     store.addAttestation(attestation);
+
+    // Unlike risk analysis, signature verification needs nothing that isn't
+    // already on-chain — it can be (and is) redone for backfilled history too.
+    store.createPendingSignatureVerification(attestation.id);
+    signatureVerificationService
+      .verifySignature(attestation.transactionHash)
+      .then(({ signerAddress }) => {
+        store.updateSignatureVerificationStatus(attestation.id, 'complete', {
+          signerAddress,
+          verified: signerAddress.toLowerCase() === attestation.auditor.toLowerCase(),
+        });
+      })
+      .catch((error: unknown) => {
+        store.updateSignatureVerificationStatus(attestation.id, 'failed', {
+          error: error instanceof Error ? error.message : 'Signature verification failed.',
+        });
+      });
   }
   for (const reward of rewardBackfill.rewards) {
     store.createPendingPayment({
@@ -173,7 +192,7 @@ async function main(): Promise<void> {
   const persistInterval = setInterval(persistSnapshot, 20_000);
 
   const agentControl = runAgent(config.agentConfig, {
-    onAttestation: (attestation) => {
+    onAttestation: (attestation, context) => {
       if (
         attestation.id === undefined ||
         attestation.supplier === undefined ||
@@ -182,13 +201,29 @@ async function main(): Promise<void> {
         return;
       }
       const attestationId = attestation.id.toString();
+      const auditor = attestation.auditor;
       store.addAttestation({
         id: attestationId,
         supplier: attestation.supplier,
-        auditor: attestation.auditor,
+        auditor,
         policyId: (attestation.policyId ?? 0n).toString(),
         observedAt: new Date().toISOString(),
       });
+
+      store.createPendingSignatureVerification(attestationId);
+      signatureVerificationService
+        .verifySignature(context.transactionHash)
+        .then(({ signerAddress }) => {
+          store.updateSignatureVerificationStatus(attestationId, 'complete', {
+            signerAddress,
+            verified: signerAddress.toLowerCase() === auditor.toLowerCase(),
+          });
+        })
+        .catch((error: unknown) => {
+          store.updateSignatureVerificationStatus(attestationId, 'failed', {
+            error: error instanceof Error ? error.message : 'Signature verification failed.',
+          });
+        });
 
       if (!riskAnalysisService) {
         return;

@@ -21,4 +21,6 @@ export type {
   RiskAnalysisStatus,
   SettlementJobRecord,
   SettlementJobState,
+  SignatureVerification,
+  SignatureVerificationStatus,
 } from './types.js';

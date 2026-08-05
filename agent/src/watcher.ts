@@ -1,5 +1,5 @@
 import { attestationRegistryAbi } from '@provenance-streams/protocol';
-import type { Address } from 'viem';
+import type { Address, Hex } from 'viem';
 
 import type { AttestationSubmittedEventArgs } from '@provenance-streams/protocol';
 
@@ -10,7 +10,15 @@ export interface WatcherConfig extends ChainConfig {
   attestationRegistryAddress: Address;
 }
 
-export type AttestationSubmittedHandler = (args: AttestationSubmittedEventArgs) => void;
+export interface AttestationSubmittedContext {
+  /** The transaction that emitted this event — lets a host independently verify the auditor's signature (see `AttestationSubmittedHandler`). */
+  transactionHash: Hex;
+}
+
+export type AttestationSubmittedHandler = (
+  args: AttestationSubmittedEventArgs,
+  context: AttestationSubmittedContext,
+) => void;
 
 /**
  * Subscribes to `AttestationSubmitted` events emitted by the deployed
@@ -28,7 +36,7 @@ export function watchAttestations(
     eventName: 'AttestationSubmitted',
     onLogs: (logs) => {
       for (const log of logs) {
-        onAttestationSubmitted(log.args);
+        onAttestationSubmitted(log.args, { transactionHash: log.transactionHash });
       }
     },
   });

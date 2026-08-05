@@ -1,4 +1,4 @@
-import type { Payment, RiskAnalysis } from '@provenance-streams/protocol';
+import type { Payment, RiskAnalysis, SignatureVerification } from '@provenance-streams/protocol';
 
 import type { AttestationRecord, PolicySummary } from './api.js';
 
@@ -59,23 +59,16 @@ export function getOverallStatus(stream: Stream): { label: string; tone: StreamT
 }
 
 /**
- * Merges the four independent read models the backend already exposes
- * (attestations, policies, payments, risk analyses) into one "stream" per
- * attestation, with a status per pipeline node.
- *
- * One node from the design mock — Signature Verified — has no backing data
- * anywhere in the system (no separate signature-check step is recorded). It's
- * kept as a visual slot so the pipeline shape matches the design system, but
- * always reports `unavailable` rather than inventing a value. AI Risk
- * Analysis, by contrast, is real once `GEMINI_API_KEY` is configured on the
- * backend — see `riskAnalysisService.ts`; it falls back to the same honest
- * `unavailable` state when no risk-analysis record exists for a stream.
+ * Merges the independent read models the backend already exposes
+ * (attestations, policies, payments, risk analyses, signature verifications)
+ * into one "stream" per attestation, with a status per pipeline node.
  */
 export function buildStreams(
   attestations: AttestationRecord[],
   policies: PolicySummary[],
   payments: Payment[],
   riskAnalyses: RiskAnalysis[] = [],
+  signatureVerifications: SignatureVerification[] = [],
 ): Stream[] {
   const policiesById = new Map(policies.map((policy) => [policy.id, policy]));
   const paymentsByAttestationId = new Map(
@@ -84,18 +77,22 @@ export function buildStreams(
   const riskAnalysesByAttestationId = new Map(
     riskAnalyses.map((analysis) => [analysis.attestationId, analysis]),
   );
+  const signatureVerificationsByAttestationId = new Map(
+    signatureVerifications.map((verification) => [verification.attestationId, verification]),
+  );
 
   return attestations.map((attestation) => {
     const policy = policiesById.get(attestation.policyId);
     const payment = paymentsByAttestationId.get(attestation.id);
     const riskAnalysis = riskAnalysesByAttestationId.get(attestation.id);
+    const signatureVerification = signatureVerificationsByAttestationId.get(attestation.id);
 
     return {
       id: attestation.id,
       attestation,
       policy,
       payment,
-      nodes: buildNodes(attestation, policy, payment, riskAnalysis),
+      nodes: buildNodes(attestation, policy, payment, riskAnalysis, signatureVerification),
     };
   });
 }
@@ -105,6 +102,7 @@ function buildNodes(
   policy: PolicySummary | undefined,
   payment: Payment | undefined,
   riskAnalysis: RiskAnalysis | undefined,
+  signatureVerification: SignatureVerification | undefined,
 ): StreamNode[] {
   const settlementStatus: NodeStatus =
     payment?.status === 'complete'
@@ -130,12 +128,7 @@ function buildNodes(
       timestamp: attestation.observedAt,
       detail: `Auditor ${attestation.auditor}`,
     },
-    {
-      key: 'signature-verified',
-      label: 'Signature Verified',
-      status: 'unavailable',
-      detail: 'Not tracked as a separate step yet',
-    },
+    buildSignatureVerificationNode(signatureVerification),
     {
       key: 'policy-matched',
       label: 'Policy Matched',
@@ -178,6 +171,53 @@ function buildNodes(
           : 'Reward Ready',
     },
   ];
+}
+
+function buildSignatureVerificationNode(
+  signatureVerification: SignatureVerification | undefined,
+): StreamNode {
+  if (!signatureVerification) {
+    return {
+      key: 'signature-verified',
+      label: 'Signature Verified',
+      status: 'unavailable',
+      detail: 'No verification record yet',
+    };
+  }
+
+  if (signatureVerification.status === 'pending') {
+    return {
+      key: 'signature-verified',
+      label: 'Signature Verified',
+      status: 'active',
+      detail: 'Recovering signer from the transaction…',
+    };
+  }
+
+  if (signatureVerification.status === 'failed') {
+    return {
+      key: 'signature-verified',
+      label: 'Signature Verified',
+      status: 'failed',
+      timestamp: signatureVerification.updatedAt,
+      detail: signatureVerification.error ?? 'Could not verify the signature',
+    };
+  }
+
+  // `verified: false` means the transaction's independently-recovered signer
+  // differs from the recorded auditor — flagged for review (coral), not
+  // asserted as fraud (red): a gasless/smart-account submission can
+  // legitimately be broadcast by a different address than the auditor's own
+  // wallet, so a mismatch alone isn't proof of tampering.
+  return {
+    key: 'signature-verified',
+    label: 'Signature Verified',
+    status: signatureVerification.verified ? 'complete' : 'attention',
+    timestamp: signatureVerification.updatedAt,
+    detail: signatureVerification.verified
+      ? `Signer matches auditor (${signatureVerification.signerAddress})`
+      : `Signer ${signatureVerification.signerAddress} does not match the recorded auditor`,
+  };
 }
 
 function buildRiskAnalysisNode(riskAnalysis: RiskAnalysis | undefined): StreamNode {
