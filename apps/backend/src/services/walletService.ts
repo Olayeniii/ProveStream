@@ -1,4 +1,4 @@
-import type { Blockchain } from '@circle-fin/user-controlled-wallets';
+import type { Blockchain, TokenBlockchain } from '@circle-fin/user-controlled-wallets';
 import { initiateUserControlledWalletsClient } from '@circle-fin/user-controlled-wallets';
 
 export interface WalletServiceConfig {
@@ -120,6 +120,40 @@ export class WalletService {
     const challengeId = response.data?.challengeId;
     if (!challengeId) {
       throw new Error('Circle did not return a challenge id for this transaction.');
+    }
+
+    return { challengeId };
+  }
+
+  /**
+   * Starts a native-currency transfer challenge from the user's embedded
+   * wallet — Arc's native gas token *is* USDC (same reasoning as
+   * `CircleTreasuryService.sendReward`), so this is `tokenAddress: ''`
+   * (empty = native token, per Circle's own SDK doc comment), not an ERC-20
+   * `transfer()` call. Like the other challenges, the returned `challengeId`
+   * is executed client-side; Circle signs and broadcasts without the key
+   * material ever reaching this server.
+   */
+  async createTransferChallenge(input: {
+    userToken: string;
+    walletId: string;
+    destinationAddress: string;
+    amount: string;
+    blockchain: string;
+  }): Promise<{ challengeId: string }> {
+    const response = await this.client.createTransaction({
+      userToken: input.userToken,
+      walletId: input.walletId,
+      destinationAddress: input.destinationAddress,
+      amounts: [input.amount],
+      tokenAddress: '',
+      blockchain: input.blockchain as TokenBlockchain,
+      fee: { type: 'level', config: { feeLevel: 'MEDIUM' } },
+    });
+
+    const challengeId = response.data?.challengeId;
+    if (!challengeId) {
+      throw new Error('Circle did not return a challenge id for this transfer.');
     }
 
     return { challengeId };

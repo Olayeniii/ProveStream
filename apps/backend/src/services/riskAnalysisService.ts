@@ -17,6 +17,10 @@ const resultSchema = z.object({
 function buildPrompt(evidenceText: string, policyId: string): string {
   return [
     'You are a fraud-risk reviewer for supply-chain attestations submitted by field auditors.',
+    // Models have no inherent notion of "today" beyond their training cutoff —
+    // without this, any 2026+ date looks "impossible"/"in the future" to them,
+    // which was producing confidently wrong date-inconsistency claims.
+    `Today's date is ${new Date().toISOString().slice(0, 10)}.`,
     `The auditor is claiming eligibility under reward policy #${policyId} and submitted this evidence:`,
     '"""',
     evidenceText,

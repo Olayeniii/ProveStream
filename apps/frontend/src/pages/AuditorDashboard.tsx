@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { formatEther } from 'viem';
 import styled from 'styled-components';
 
 import type { AttestationFormValues } from '../components/AttestationForm.js';
@@ -12,12 +13,14 @@ import { WalletChip } from '../components/WalletChip.js';
 import type { AppEnv } from '../env.js';
 import { useEmbeddedWallet } from '../hooks/useEmbeddedWallet.js';
 import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
+import { getPublicClient } from '../lib/clients.js';
 import { buildStreams } from '../lib/streams.js';
 import type { Payment, RiskAnalysis, SignatureVerification } from '@provenance-streams/protocol';
 
 export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
   const wallet = useEmbeddedWallet('auditor', api);
   const [status, setStatus] = useState<SubmissionStatus>({ state: 'idle' });
+  const [balance, setBalance] = useState<string | undefined>(undefined);
   const [attestations, setAttestations] = useState<AttestationRecord[]>([]);
   const [policies, setPolicies] = useState<PolicySummary[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -27,6 +30,12 @@ export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) 
   useEffect(() => {
     if (wallet.status !== 'ready') {
       return;
+    }
+    if (wallet.walletAddress) {
+      getPublicClient(env)
+        .getBalance({ address: wallet.walletAddress as `0x${string}` })
+        .then((value) => setBalance(formatEther(value)))
+        .catch(() => undefined);
     }
     api
       .listAttestations()
@@ -48,7 +57,7 @@ export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) 
       .listSignatureVerifications()
       .then(setSignatureVerifications)
       .catch(() => undefined);
-  }, [api, wallet.status, status.state]);
+  }, [api, env, wallet.status, wallet.walletAddress, status.state]);
 
   async function handleSubmit(values: AttestationFormValues) {
     setStatus({ state: 'pending' });

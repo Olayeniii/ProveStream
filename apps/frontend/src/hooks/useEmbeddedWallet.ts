@@ -19,6 +19,7 @@ export interface EmbeddedWalletState {
     proofHash: string;
     policyId: string;
   }) => Promise<{ txHash: string }>;
+  sendTransfer: (input: { destinationAddress: string; amount: string }) => Promise<{ txHash: string }>;
 }
 
 function storageKey(role: string): string {
@@ -125,6 +126,24 @@ export function useEmbeddedWallet(role: string, api: ApiClient): EmbeddedWalletS
     [api, session, sdk, walletId],
   );
 
+  const sendTransfer = useCallback(
+    async (input: { destinationAddress: string; amount: string }) => {
+      if (!session || !sdk || !walletId) {
+        throw new Error('Sign in with your embedded wallet first.');
+      }
+
+      const challenge = await api.createTransferChallenge(session.userId, {
+        userToken: session.userToken,
+        walletId,
+        ...input,
+      });
+      await executeChallenge(sdk, challenge.challengeId);
+
+      return api.waitForChallengeTxHash(session.userId, challenge.challengeId, session.userToken);
+    },
+    [api, session, sdk, walletId],
+  );
+
   return {
     status,
     userId: session?.userId,
@@ -133,5 +152,6 @@ export function useEmbeddedWallet(role: string, api: ApiClient): EmbeddedWalletS
     login,
     logout,
     submitAttestation,
+    sendTransfer,
   };
 }

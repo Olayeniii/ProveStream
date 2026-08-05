@@ -10,7 +10,7 @@ import {
   NvidiaProvider,
   RiskAnalysisService,
 } from './services/riskAnalysisService.js';
-import type { RiskAnalysisProvider } from './services/riskAnalysisService.js';
+import type { RiskAnalysisProvider, RiskAnalysisResult } from './services/riskAnalysisService.js';
 import { SignatureVerificationService } from './services/signatureVerificationService.js';
 import { loadSnapshot, saveSnapshot } from './services/snapshotStore.js';
 import { WalletService } from './services/walletService.js';
@@ -215,6 +215,17 @@ async function main(): Promise<void> {
   persistSnapshot();
   const persistInterval = setInterval(persistSnapshot, 20_000);
 
+  /**
+   * Tracks each attestation's risk-analysis outcome (resolving to `undefined`
+   * on failure/no-evidence/not-configured, never rejecting) so
+   * `shouldHoldForReview` below can await the *same* in-flight call instead
+   * of re-triggering one, and so it has something to check at all — an
+   * attestation's `RewardEligible` can fire before its risk analysis
+   * finishes, since the two run on independent timelines.
+   */
+  const riskAnalysisPromises = new Map<string, Promise<RiskAnalysisResult | undefined>>();
+  const RISK_HOLD_WAIT_MS = 20_000;
+
   const agentControl = runAgent(config.agentConfig, {
     onAttestation: (attestation, context) => {
       if (
@@ -241,7 +252,7 @@ async function main(): Promise<void> {
         return;
       }
       const attestationIdValue = attestation.id;
-      attestationReader
+      const riskAnalysisPromise: Promise<RiskAnalysisResult | undefined> = attestationReader
         .getProofHash(attestationIdValue)
         .then((proofHash) => {
           const evidenceText = store.takePendingEvidence(proofHash);
@@ -251,16 +262,22 @@ async function main(): Promise<void> {
           store.createPendingRiskAnalysis(attestationId);
           return riskAnalysisService
             .analyzeEvidence({ evidenceText, policyId: (attestation.policyId ?? 0n).toString() })
-            .then((result) => store.updateRiskAnalysisStatus(attestationId, 'complete', result))
+            .then((result) => {
+              store.updateRiskAnalysisStatus(attestationId, 'complete', result);
+              return result;
+            })
             .catch((error: unknown) => {
               store.updateRiskAnalysisStatus(attestationId, 'failed', {
                 error: error instanceof Error ? error.message : 'Risk analysis failed.',
               });
+              return undefined;
             });
         })
         .catch((error: unknown) => {
           console.error('Failed to read attestation for risk analysis:', error);
+          return undefined;
         });
+      riskAnalysisPromises.set(attestationId, riskAnalysisPromise);
     },
     onRewardEligible: (reward, context) => {
       if (reward.rewardId === undefined || reward.supplier === undefined) {
@@ -299,6 +316,39 @@ async function main(): Promise<void> {
         score: result.score,
         reasons: result.signals.map((signal) => signal.reason),
       });
+    },
+    shouldHoldForReview: async (rewardId, context) => {
+      const attestationId = context.attestationId?.toString();
+      const pending = attestationId ? riskAnalysisPromises.get(attestationId) : undefined;
+      if (!pending) {
+        // No risk analysis was ever attempted for this attestation (no
+        // evidence submitted, or the feature isn't configured) — nothing to
+        // gate on, so don't hold.
+        return false;
+      }
+
+      const result = await Promise.race([
+        pending,
+        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), RISK_HOLD_WAIT_MS)),
+      ]);
+      if (!result || result.score < (agentConfig.fraudScoreThreshold ?? 70)) {
+        return false;
+      }
+
+      const payment = store.listPayments().find((entry) => entry.rewardId === rewardId.toString());
+      if (!payment) {
+        return false;
+      }
+      store.createFraudAlert({
+        rewardId: rewardId.toString(),
+        attestationId: payment.attestationId,
+        supplier: payment.supplier,
+        policyId: payment.policyId,
+        rewardAmount: payment.rewardAmount,
+        score: result.score,
+        reasons: [`AI risk analysis (${result.provider}): ${result.summary}`],
+      });
+      return true;
     },
     onQueueStateChange: (rewardId, state, extra) => {
       store.updateSettlementJobState(rewardId, state, {

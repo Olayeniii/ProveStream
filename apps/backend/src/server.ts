@@ -30,6 +30,12 @@ const attestationChallengeBodySchema = z.object({
   proofHash: z.string().min(1),
   policyId: z.string().min(1),
 });
+const transferChallengeBodySchema = z.object({
+  userToken: z.string().min(1),
+  walletId: z.string().min(1),
+  destinationAddress: z.string().refine(isAddress),
+  amount: z.string().min(1),
+});
 const waitForTxHashBodySchema = z.object({ userToken: z.string().min(1) });
 const evidenceBodySchema = z.object({
   proofHash: z.string().refine(isHex),
@@ -255,6 +261,32 @@ export function createServer(deps: ServerDependencies): Express {
         contractAddress: deps.attestationRegistryAddress,
         abiFunctionSignature: 'submitAttestation(address,bytes32,uint256)',
         abiParameters: [body.data.supplier, body.data.proofHash, body.data.policyId],
+      })
+      .then((challenge) => res.json(challenge))
+      .catch(next);
+  });
+
+  app.post('/api/wallet-sessions/:userId/transfer-challenge', (req, res, next) => {
+    const walletService = requireWalletService(deps, res);
+    if (!walletService) {
+      return;
+    }
+
+    const body = transferChallengeBodySchema.safeParse(req.body);
+    if (!body.success) {
+      res
+        .status(400)
+        .json({ error: 'destinationAddress, amount, walletId, userToken are required' });
+      return;
+    }
+
+    walletService
+      .createTransferChallenge({
+        userToken: body.data.userToken,
+        walletId: body.data.walletId,
+        destinationAddress: body.data.destinationAddress,
+        amount: body.data.amount,
+        blockchain: deps.defaultWalletBlockchain,
       })
       .then((challenge) => res.json(challenge))
       .catch(next);

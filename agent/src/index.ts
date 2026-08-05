@@ -88,6 +88,17 @@ export interface RunAgentHooks {
    * re-dispatching the payout itself.
    */
   onFraudFlagged?: (rewardId: bigint, result: FraudCheckResult) => void;
+  /**
+   * Called for a reward that *cleared* the agent's own rule-based fraud
+   * check, right before it would be enqueued for settlement — lets the host
+   * apply additional hold logic the agent has no visibility into (e.g. AI
+   * risk analysis, which needs Gemini/NVIDIA credentials only `apps/backend`
+   * holds). Returning `true` holds the payout exactly like a fraud flag:
+   * nothing is enqueued, and it's the host's own responsibility to record
+   * why and to call `approvePayout` later if it's cleared on review.
+   * Returning `false` (or the hook being absent) lets settlement proceed.
+   */
+  shouldHoldForReview?: (rewardId: bigint, context: RewardEligibleContext) => Promise<boolean>;
   /** Mirrors `SettlementQueue`'s job lifecycle, for the Admin dashboard's settlement queue view. */
   onQueueStateChange?: (
     rewardId: string,
@@ -317,7 +328,24 @@ export function runAgent(configInput: AgentConfigInput, hooks: RunAgentHooks = {
       return;
     }
 
-    enqueueSettlement(rewardId, supplier, rewardAmount);
+    // Give the host a chance to hold this too, for reasons the agent's own
+    // rule-based check can't see (AI risk analysis). Async because that
+    // check may need to wait on an in-flight LLM call.
+    Promise.resolve(hooks.shouldHoldForReview?.(rewardId, { attestationId }))
+      .then((held) => {
+        if (held) {
+          logger.warn('Payout held for review by host', { rewardId: rewardId.toString() });
+          return;
+        }
+        enqueueSettlement(rewardId, supplier, rewardAmount);
+      })
+      .catch((error: unknown) => {
+        logger.error('shouldHoldForReview hook failed; settling as if it cleared', {
+          rewardId: rewardId.toString(),
+          error,
+        });
+        enqueueSettlement(rewardId, supplier, rewardAmount);
+      });
   });
 
   return {
