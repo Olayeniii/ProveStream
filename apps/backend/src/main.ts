@@ -68,9 +68,14 @@ async function main(): Promise<void> {
   }
   if (config.nvidia) {
     riskProviders.push(
-      new NvidiaProvider('DeepSeek R1 (NVIDIA)', {
+      new NvidiaProvider('DeepSeek V4 Flash (NVIDIA)', {
         apiKey: config.nvidia.apiKey,
         model: config.nvidia.deepseekModel,
+        // DeepSeek V4 is a reasoning ("thinking") model by default, which would
+        // wrap the JSON response in chain-of-thought text our prompt doesn't
+        // ask for and `extractJson()` doesn't expect. Disabling it (per
+        // NVIDIA's own DeepSeek V4 example) gets a direct answer instead.
+        extraBody: { chat_template_kwargs: { thinking: false } },
       }),
     );
     riskProviders.push(

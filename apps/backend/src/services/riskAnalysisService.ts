@@ -97,7 +97,7 @@ export class GeminiProvider implements RiskAnalysisProvider {
 export class NvidiaProvider implements RiskAnalysisProvider {
   constructor(
     readonly name: string,
-    private readonly config: { apiKey: string; model: string },
+    private readonly config: { apiKey: string; model: string; extraBody?: Record<string, unknown> },
   ) {}
 
   async analyze(
@@ -116,6 +116,7 @@ export class NvidiaProvider implements RiskAnalysisProvider {
         temperature: 0.2,
         max_tokens: 512,
         stream: false,
+        ...this.config.extraBody,
       }),
     });
 
