@@ -89,6 +89,8 @@ export interface RiskAnalysis {
   /** The model's confidence in its own score, 0-100. Only present once `status` is `complete`. */
   confidence?: number;
   summary?: string;
+  /** Which model actually produced this result (e.g. "Gemini", "DeepSeek R1 (NVIDIA)") — visible so a fallback provider firing is transparent, not hidden. Only present once `status` is `complete`. */
+  provider?: string;
   error?: string;
   createdAt: string;
   updatedAt: string;

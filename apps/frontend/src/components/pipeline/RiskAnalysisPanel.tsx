@@ -34,7 +34,12 @@ export function RiskAnalysisPanel({ stream }: { stream: Stream }) {
       </PanelHeader>
 
       {node?.status === 'complete' && node.score !== undefined ? (
-        <Complete score={node.score} confidence={node.confidence} summary={node.detail} />
+        <Complete
+          score={node.score}
+          confidence={node.confidence}
+          summary={node.detail}
+          provider={node.provider}
+        />
       ) : node?.status === 'active' ? (
         <Empty>Analyzing submitted evidence…</Empty>
       ) : node?.status === 'failed' ? (
@@ -53,10 +58,12 @@ function Complete({
   score,
   confidence,
   summary,
+  provider,
 }: {
   score: number;
   confidence: number | undefined;
   summary: string | undefined;
+  provider: string | undefined;
 }) {
   const risk = riskLabel(score);
 
@@ -67,6 +74,7 @@ function Complete({
           <GaugeValue>{score}%</GaugeValue>
         </Gauge>
         <GaugeCaption $tone={risk.tone}>{risk.label}</GaugeCaption>
+        {provider && <ProviderTag>Scored by {provider}</ProviderTag>}
       </GaugeRow>
       {summary && <Summary>{summary}</Summary>}
       {confidence !== undefined && (
@@ -178,6 +186,11 @@ const GaugeCaption = styled.span<{ $tone: 'positive' | 'warning' | 'negative' }>
   font-weight: 600;
   color: ${(props) =>
     props.$tone === 'positive' ? '#166534' : props.$tone === 'warning' ? '#92400E' : '#9A3412'};
+`;
+
+const ProviderTag = styled.span`
+  font-size: 0.72rem;
+  color: ${(props) => props.theme.colors.textMuted};
 `;
 
 const Summary = styled.p`

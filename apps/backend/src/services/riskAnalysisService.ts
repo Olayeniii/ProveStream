@@ -1,14 +1,11 @@
 import { z } from 'zod';
 
-export interface RiskAnalysisServiceConfig {
-  apiKey: string;
-  model: string;
-}
-
 export interface RiskAnalysisResult {
   score: number;
   confidence: number;
   summary: string;
+  /** Which model actually produced this result — surfaced to the frontend so a fallback firing is visible, not hidden. */
+  provider: string;
 }
 
 const resultSchema = z.object({
@@ -39,32 +36,42 @@ function extractJson(text: string): unknown {
   return JSON.parse(stripped);
 }
 
+/** One model this service can ask to score evidence — implemented by `GeminiProvider` and `NvidiaProvider` below. */
+export interface RiskAnalysisProvider {
+  /** Shown to the frontend as the source of a result, e.g. "Gemini" or "DeepSeek R1 (NVIDIA)". */
+  readonly name: string;
+  analyze(evidenceText: string, policyId: string): Promise<Omit<RiskAnalysisResult, 'provider'>>;
+}
+
 /**
  * Calls Google's Gemini API directly over `fetch` (no SDK dependency, matching
  * this project's otherwise-lean dependency footprint) to score an attestation's
- * submitted evidence text. Only constructed when `GEMINI_API_KEY` is configured;
- * see `apps/backend/src/main.ts`.
+ * submitted evidence text.
  */
-export class RiskAnalysisService {
-  constructor(private readonly config: RiskAnalysisServiceConfig) {}
+export class GeminiProvider implements RiskAnalysisProvider {
+  readonly name = 'Gemini';
 
-  async analyzeEvidence(input: {
-    evidenceText: string;
-    policyId: string;
-  }): Promise<RiskAnalysisResult> {
+  constructor(private readonly config: { apiKey: string; model: string }) {}
+
+  async analyze(
+    evidenceText: string,
+    policyId: string,
+  ): Promise<Omit<RiskAnalysisResult, 'provider'>> {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${this.config.model}:generateContent?key=${this.config.apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: buildPrompt(input.evidenceText, input.policyId) }] }],
+          contents: [{ parts: [{ text: buildPrompt(evidenceText, policyId) }] }],
         }),
       },
     );
 
     if (!response.ok) {
-      throw new Error(`Gemini request failed with status ${response.status.toString()}`);
+      throw new Error(
+        `Gemini request failed with status ${response.status.toString()}: ${await response.text()}`,
+      );
     }
 
     const body = (await response.json()) as {
@@ -76,5 +83,89 @@ export class RiskAnalysisService {
     }
 
     return resultSchema.parse(extractJson(text));
+  }
+}
+
+/**
+ * Calls a model hosted on NVIDIA's NIM catalog (build.nvidia.com) via its
+ * OpenAI-compatible `/v1/chat/completions` endpoint — one API key, any
+ * model NVIDIA exposes through it (DeepSeek, Mistral, Llama, ...), selected
+ * by `config.model`. Used as a backup when Gemini is unavailable (e.g. its
+ * free-tier quota is exhausted — a real, observed failure mode, not
+ * hypothetical) so risk analysis keeps working instead of going dark.
+ */
+export class NvidiaProvider implements RiskAnalysisProvider {
+  constructor(
+    readonly name: string,
+    private readonly config: { apiKey: string; model: string },
+  ) {}
+
+  async analyze(
+    evidenceText: string,
+    policyId: string,
+  ): Promise<Omit<RiskAnalysisResult, 'provider'>> {
+    const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.config.model,
+        messages: [{ role: 'user', content: buildPrompt(evidenceText, policyId) }],
+        temperature: 0.2,
+        max_tokens: 512,
+        stream: false,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `NVIDIA (${this.config.model}) request failed with status ${response.status.toString()}: ${await response.text()}`,
+      );
+    }
+
+    const body = (await response.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    const text = body.choices?.[0]?.message?.content;
+    if (!text) {
+      throw new Error(`NVIDIA (${this.config.model}) did not return a response.`);
+    }
+
+    return resultSchema.parse(extractJson(text));
+  }
+}
+
+/**
+ * Scores an attestation's submitted evidence text for fraud risk, trying
+ * each configured `RiskAnalysisProvider` in order and falling back to the
+ * next on failure — a quota-exhausted or otherwise-down provider degrades
+ * to a backup instead of taking the whole feature offline. Only throws once
+ * every provider has failed, with all their errors attached for logging.
+ */
+export class RiskAnalysisService {
+  constructor(private readonly providers: readonly RiskAnalysisProvider[]) {
+    if (providers.length === 0) {
+      throw new Error('RiskAnalysisService needs at least one provider.');
+    }
+  }
+
+  async analyzeEvidence(input: {
+    evidenceText: string;
+    policyId: string;
+  }): Promise<RiskAnalysisResult> {
+    const errors: string[] = [];
+    for (const provider of this.providers) {
+      try {
+        const result = await provider.analyze(input.evidenceText, input.policyId);
+        return { ...result, provider: provider.name };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Risk analysis provider "${provider.name}" failed, trying next:`, message);
+        errors.push(`${provider.name}: ${message}`);
+      }
+    }
+    throw new Error(`All risk analysis providers failed:\n${errors.join('\n')}`);
   }
 }

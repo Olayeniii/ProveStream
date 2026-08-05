@@ -145,7 +145,13 @@ export class Store {
   updateRiskAnalysisStatus(
     attestationId: string,
     status: RiskAnalysisStatus,
-    extra?: { score?: number; confidence?: number; summary?: string; error?: string },
+    extra?: {
+      score?: number;
+      confidence?: number;
+      summary?: string;
+      provider?: string;
+      error?: string;
+    },
   ): void {
     const analysis = this.riskAnalyses.get(attestationId);
     if (!analysis) {
@@ -161,6 +167,9 @@ export class Store {
     }
     if (extra?.summary) {
       analysis.summary = extra.summary;
+    }
+    if (extra?.provider) {
+      analysis.provider = extra.provider;
     }
     if (extra?.error) {
       analysis.error = extra.error;

@@ -19,6 +19,8 @@ export interface StreamNode {
   /** Only populated on the ai-risk-analysis node once a real score exists. */
   score?: number | undefined;
   confidence?: number | undefined;
+  /** Which model actually produced the score (e.g. "Gemini", "DeepSeek R1 (NVIDIA)") — visible so a fallback provider firing is transparent. */
+  provider?: string | undefined;
 }
 
 export interface Stream {
@@ -215,5 +217,6 @@ function buildRiskAnalysisNode(riskAnalysis: RiskAnalysis | undefined): StreamNo
     detail: riskAnalysis.summary,
     score: riskAnalysis.score,
     confidence: riskAnalysis.confidence,
+    provider: riskAnalysis.provider,
   };
 }

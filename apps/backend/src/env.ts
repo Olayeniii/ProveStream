@@ -30,6 +30,9 @@ const serverConfigSchema = z.object({
   circle: circleSchema.partial(),
   geminiApiKey: z.string().optional(),
   geminiModel: z.string().min(1).default('gemini-2.0-flash'),
+  nvidiaApiKey: z.string().optional(),
+  nvidiaDeepseekModel: z.string().min(1).default('deepseek-ai/deepseek-r1'),
+  nvidiaMistralModel: z.string().min(1).default('mistralai/mixtral-8x22b-instruct-v0.1'),
   rewardPolicyDeployedAtBlock: z.coerce.bigint().default(0n),
   attestationRegistryDeployedAtBlock: z.coerce.bigint().optional(),
   rewardDispatcherDeployedAtBlock: z.coerce.bigint().optional(),
@@ -70,6 +73,8 @@ export interface ServerConfig {
   embeddedWallet: { apiKey: string; appId: string } | undefined;
   /** Present only when `GEMINI_API_KEY` is configured for AI risk analysis. */
   gemini: { apiKey: string; model: string } | undefined;
+  /** Present only when `NVIDIA_API_KEY` is configured — a fallback risk-analysis provider (DeepSeek/Mistral via NVIDIA's NIM catalog) for when Gemini is unavailable. */
+  nvidia: { apiKey: string; deepseekModel: string; mistralModel: string } | undefined;
 }
 
 /**
@@ -98,6 +103,9 @@ export function loadServerConfig(): ServerConfig {
     },
     geminiApiKey: process.env.GEMINI_API_KEY,
     geminiModel: process.env.GEMINI_MODEL,
+    nvidiaApiKey: process.env.NVIDIA_API_KEY,
+    nvidiaDeepseekModel: process.env.NVIDIA_DEEPSEEK_MODEL,
+    nvidiaMistralModel: process.env.NVIDIA_MISTRAL_MODEL,
     rewardPolicyDeployedAtBlock: process.env.REWARD_POLICY_DEPLOYED_AT_BLOCK,
     attestationRegistryDeployedAtBlock: process.env.ATTESTATION_REGISTRY_DEPLOYED_AT_BLOCK,
     rewardDispatcherDeployedAtBlock: process.env.REWARD_DISPATCHER_DEPLOYED_AT_BLOCK,
@@ -153,6 +161,13 @@ export function loadServerConfig(): ServerConfig {
       : undefined,
     embeddedWallet: embeddedWalletParsed.success ? embeddedWalletParsed.data : undefined,
     gemini: raw.geminiApiKey ? { apiKey: raw.geminiApiKey, model: raw.geminiModel } : undefined,
+    nvidia: raw.nvidiaApiKey
+      ? {
+          apiKey: raw.nvidiaApiKey,
+          deepseekModel: raw.nvidiaDeepseekModel,
+          mistralModel: raw.nvidiaMistralModel,
+        }
+      : undefined,
   };
 }
 

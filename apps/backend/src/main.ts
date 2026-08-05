@@ -4,7 +4,12 @@ import { loadServerConfig } from './env.js';
 import { createAttestationReader } from './services/attestationReader.js';
 import { HistoryService } from './services/historyService.js';
 import { PolicyService } from './services/policyService.js';
-import { RiskAnalysisService } from './services/riskAnalysisService.js';
+import {
+  GeminiProvider,
+  NvidiaProvider,
+  RiskAnalysisService,
+} from './services/riskAnalysisService.js';
+import type { RiskAnalysisProvider } from './services/riskAnalysisService.js';
 import { loadSnapshot, saveSnapshot } from './services/snapshotStore.js';
 import { WalletService } from './services/walletService.js';
 import { createServer } from './server.js';
@@ -51,9 +56,32 @@ async function main(): Promise<void> {
         appId: config.embeddedWallet.appId,
       })
     : undefined;
-  const riskAnalysisService: RiskAnalysisService | undefined = config.gemini
-    ? new RiskAnalysisService({ apiKey: config.gemini.apiKey, model: config.gemini.model })
-    : undefined;
+  // Ordered fallback chain: Gemini first (if configured), then NVIDIA-hosted
+  // DeepSeek, then NVIDIA-hosted Mistral — each an independent, optional
+  // provider. A quota-exhausted or otherwise-down provider just falls
+  // through to the next instead of taking risk analysis offline entirely.
+  const riskProviders: RiskAnalysisProvider[] = [];
+  if (config.gemini) {
+    riskProviders.push(
+      new GeminiProvider({ apiKey: config.gemini.apiKey, model: config.gemini.model }),
+    );
+  }
+  if (config.nvidia) {
+    riskProviders.push(
+      new NvidiaProvider('DeepSeek R1 (NVIDIA)', {
+        apiKey: config.nvidia.apiKey,
+        model: config.nvidia.deepseekModel,
+      }),
+    );
+    riskProviders.push(
+      new NvidiaProvider('Mistral (NVIDIA)', {
+        apiKey: config.nvidia.apiKey,
+        model: config.nvidia.mistralModel,
+      }),
+    );
+  }
+  const riskAnalysisService: RiskAnalysisService | undefined =
+    riskProviders.length > 0 ? new RiskAnalysisService(riskProviders) : undefined;
   const attestationReader = createAttestationReader({
     rpcUrl: config.rpcUrl,
     attestationRegistryAddress: config.attestationRegistryAddress,
