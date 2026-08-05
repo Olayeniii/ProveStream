@@ -329,7 +329,9 @@ async function main(): Promise<void> {
 
       const result = await Promise.race([
         pending,
-        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), RISK_HOLD_WAIT_MS)),
+        new Promise<undefined>((resolve) =>
+          setTimeout(() => resolve(undefined), RISK_HOLD_WAIT_MS),
+        ),
       ]);
       if (!result || result.score < (agentConfig.fraudScoreThreshold ?? 70)) {
         return false;

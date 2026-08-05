@@ -19,7 +19,10 @@ export interface EmbeddedWalletState {
     proofHash: string;
     policyId: string;
   }) => Promise<{ txHash: string }>;
-  sendTransfer: (input: { destinationAddress: string; amount: string }) => Promise<{ txHash: string }>;
+  sendTransfer: (input: {
+    destinationAddress: string;
+    amount: string;
+  }) => Promise<{ txHash: string }>;
 }
 
 function storageKey(role: string): string {

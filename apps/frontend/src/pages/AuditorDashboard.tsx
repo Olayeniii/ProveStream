@@ -108,7 +108,9 @@ export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) 
           <WalletChip
             address={wallet.walletAddress}
             role="Auditor Wallet"
+            balance={balance}
             onSignOut={wallet.logout}
+            onSend={wallet.sendTransfer}
           />
         ) : undefined
       }

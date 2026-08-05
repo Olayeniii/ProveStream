@@ -152,10 +152,14 @@ export function createApiClient(baseUrl: string) {
       userId: string,
       input: { userToken: string; walletId: string; destinationAddress: string; amount: string },
     ) =>
-      request<{ challengeId: string }>(baseUrl, `/api/wallet-sessions/${userId}/transfer-challenge`, {
-        method: 'POST',
-        body: JSON.stringify(input),
-      }),
+      request<{ challengeId: string }>(
+        baseUrl,
+        `/api/wallet-sessions/${userId}/transfer-challenge`,
+        {
+          method: 'POST',
+          body: JSON.stringify(input),
+        },
+      ),
   };
 }
 

@@ -124,7 +124,9 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
           <WalletChip
             address={wallet.walletAddress}
             role="Supplier Wallet"
+            balance={balance}
             onSignOut={wallet.logout}
+            onSend={wallet.sendTransfer}
           />
         ) : undefined
       }
