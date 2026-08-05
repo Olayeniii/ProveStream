@@ -103,14 +103,19 @@ export function LandingPage({ env, api }: { env: AppEnv; api: ApiClient }) {
         </CtaRow>
       </Hero>
 
-      <StatsStrip>
+      <StatsRow>
         {stats.map((stat) => (
-          <StatCell key={stat.label}>
+          <StatCard key={stat.label}>
+            {stat.label === 'Network' && (
+              <LiveBadge>
+                <LiveDot /> Live
+              </LiveBadge>
+            )}
             <StatValue>{stat.value}</StatValue>
             <StatLabel>{stat.label}</StatLabel>
-          </StatCell>
+          </StatCard>
         ))}
-      </StatsStrip>
+      </StatsRow>
     </Page>
   );
 }
@@ -252,32 +257,50 @@ const SecondaryCta = styled(Link)`
   text-decoration: none;
 `;
 
-const StatsStrip = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  border-top: 1px solid ${(props) => props.theme.colors.border};
+const StatsRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+  padding: 0 24px 56px;
 `;
 
-const StatCell = styled.div`
-  padding: 20px;
-  text-align: center;
-  border-right: 1px solid ${(props) => props.theme.colors.border};
+const StatCard = styled.div`
+  position: relative;
+  min-width: 150px;
+  padding: 20px 22px;
+  border-radius: 18px;
+  border: 1px solid ${(props) => props.theme.colors.border};
+  background: ${(props) => props.theme.colors.surface}cc;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+`;
 
-  &:last-child {
-    border-right: none;
-  }
+const LiveBadge = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 8px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: ${(props) => props.theme.colors.textMuted};
+`;
+
+const LiveDot = styled.span`
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: ${(props) => props.theme.colors.mint};
 `;
 
 const StatValue = styled.div`
-  font-size: 1.3rem;
+  font-size: 1.6rem;
   font-weight: 700;
   color: ${(props) => props.theme.colors.text};
 `;
 
 const StatLabel = styled.div`
   margin-top: 2px;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: 0.75rem;
   color: ${(props) => props.theme.colors.textMuted};
 `;
