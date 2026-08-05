@@ -254,4 +254,46 @@ export class Store {
       ).length,
     };
   }
+
+  /** Plain-JSON view of everything worth surviving a restart — see `snapshotStore.ts`. */
+  toSnapshotData(): {
+    attestations: AttestationRecord[];
+    payments: Payment[];
+    fraudAlerts: FraudAlert[];
+    settlementJobs: SettlementJobRecord[];
+    destinationWallets: DestinationWallet[];
+  } {
+    return {
+      attestations: this.attestations,
+      payments: [...this.payments.values()],
+      fraudAlerts: [...this.fraudAlerts.values()],
+      settlementJobs: [...this.settlementJobs.values()],
+      destinationWallets: [...this.destinationWallets.values()],
+    };
+  }
+
+  /** Repopulates the store from a previous `toSnapshotData()` — call once, right after construction, before anything else touches the store. */
+  restore(data: {
+    attestations: AttestationRecord[];
+    payments: Payment[];
+    fraudAlerts: FraudAlert[];
+    settlementJobs: SettlementJobRecord[];
+    destinationWallets: DestinationWallet[];
+  }): void {
+    for (const attestation of [...data.attestations].reverse()) {
+      this.addAttestation(attestation);
+    }
+    for (const payment of data.payments) {
+      this.payments.set(payment.rewardId, payment);
+    }
+    for (const alert of data.fraudAlerts) {
+      this.fraudAlerts.set(alert.rewardId, alert);
+    }
+    for (const job of data.settlementJobs) {
+      this.settlementJobs.set(job.rewardId, job);
+    }
+    for (const wallet of data.destinationWallets) {
+      this.destinationWallets.set(wallet.supplier, wallet);
+    }
+  }
 }

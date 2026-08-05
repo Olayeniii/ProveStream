@@ -198,6 +198,21 @@ account-type change with its own risk. Since this is purely additive —
 new logins get gas sponsorship, existing ones just keep paying their own
 gas as before — there's no forced-migration tradeoff to make.
 
+### A small JSON snapshot file, not a database, closes the restart gap
+
+`Store`'s read models, `PolicyService`'s known policy ids, and each chain
+scan's `scannedThroughBlock` are all disposable data the app re-derives from
+chain events, not primary data needing transactions or indexes — so
+persisting them is one gitignored JSON file (`snapshotStore.ts`), not a
+database. `PolicyService` and `HistoryService` scan incrementally from a
+persisted cursor instead of each contract's deployment block, and stop
+(returning whatever they found) rather than throwing on a rate-limited
+chunk, so both are resumable across restarts instead of needing to finish
+in one shot. `rpcRetry.ts`'s `withRpcRetries` also gates every RPC call
+behind one shared pacer, not just per-call retry backoff — otherwise
+multiple scans retrying independently just re-trip Arc testnet's rate limit
+by stacking their bursts.
+
 ### `SUPPORTED_DESTINATION_CHAINS` lives in `packages/protocol`, not `agent`
 
 It started in `agent/src/wallet/destinationWallet.ts`, but the frontend's

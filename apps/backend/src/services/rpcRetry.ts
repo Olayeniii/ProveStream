@@ -1,17 +1,38 @@
-const DEFAULT_MAX_ATTEMPTS = 5;
-const DEFAULT_BASE_DELAY_MS = 500;
+const DEFAULT_MAX_ATTEMPTS = 6;
+const DEFAULT_BASE_DELAY_MS = 800;
+
+/**
+ * Arc testnet's public RPC endpoint throttles hard — observed failing
+ * `eth_getLogs`/`getBlock` calls after only a handful fired close together
+ * at backend startup (`PolicyService`'s chunked policy scan running
+ * alongside `HistoryService`'s attestation/reward backfill). Retrying each
+ * call independently isn't enough on its own: several *different* call
+ * sites each retrying in parallel just stack their bursts back on top of
+ * each other. This module-level `nextAvailableAt` is a simple shared gate —
+ * every call to `withRpcRetries`, from any service, queues behind it — so
+ * the whole process stays under the limit collectively, not just per call.
+ */
+const MIN_INTERVAL_MS = 350;
+let nextAvailableAt = 0;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function waitForTurn(): Promise<void> {
+  const now = Date.now();
+  const waitMs = Math.max(0, nextAvailableAt - now);
+  nextAvailableAt = Math.max(now, nextAvailableAt) + MIN_INTERVAL_MS;
+  if (waitMs > 0) {
+    await sleep(waitMs);
+  }
+}
+
 /**
- * Retries `fn` with exponential backoff. Public RPC providers (Arc testnet
- * included) intermittently return transient errors under load — most
- * visibly "request limit reached" when a service issues many `eth_getLogs`
- * calls back to back at startup (`PolicyService`'s chunked scan,
- * `HistoryService`'s backfill). Those aren't permanent failures, just a
- * signal to slow down and retry.
+ * Paces `fn` behind the shared gate above, then retries it with exponential
+ * backoff if it still fails — the backoff is a safety net for genuine
+ * transient errors; the pacing is what actually keeps the rate limit from
+ * tripping in the first place.
  */
 export async function withRpcRetries<T>(
   fn: () => Promise<T>,
@@ -19,6 +40,7 @@ export async function withRpcRetries<T>(
 ): Promise<T> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    await waitForTurn();
     try {
       return await fn();
     } catch (error) {

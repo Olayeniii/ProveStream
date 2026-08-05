@@ -178,6 +178,23 @@ an `EOA`. `apps/backend/src/services/walletService.ts`'s
 existing `EOA` wallets from before this milestone keep working unchanged —
 this is a forward-only change, never a forced re-migration.
 
+## Restart persistence and RPC rate limits
+
+The backend keeps one small JSON file, `apps/backend/.store-snapshot.json`
+(gitignored, created automatically — not a database), with the dashboards'
+read models plus how far `PolicyService` and `HistoryService` have scanned
+each contract's event history. On startup it restores from that file, then
+`HistoryService` backfills only the delta since the last successful scan
+instead of every `AttestationSubmitted`/`RewardEligible` event since
+deployment — so a restart doesn't lose history, and doesn't hammer Arc
+testnet's public RPC re-scanning the same range every time either. Both
+`PolicyService` and `HistoryService` are incremental and resumable: a chunk
+that still fails after retrying (`apps/backend/src/services/rpcRetry.ts`,
+shared pacer + backoff across every RPC call) just stops the scan for that
+call instead of throwing, so you always get whatever was found so far, and
+the next call resumes from exactly there. See
+[`docs/decisions.md`](docs/decisions.md) for the full reasoning.
+
 ## Current progress (Milestone 3)
 
 - [x] `RewardPolicy.sol` — `createPolicy` / `updatePolicy` / `disablePolicy` /

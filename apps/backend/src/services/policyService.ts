@@ -15,8 +15,10 @@ export interface PolicySummary {
 export interface PolicyServiceConfig {
   rpcUrl: string;
   rewardPolicyAddress: Address;
-  /** Block `RewardPolicy` was deployed at — scanning starts here instead of genesis. */
-  deployedAtBlock?: bigint;
+  /** Block to start scanning `PolicyCreated` logs from — the contract's deployment block on a fresh start, or one block past a previously persisted `scannedThroughBlock` (see `getScanProgress()`) to resume an interrupted scan without re-covering ground already paid for in RPC calls. */
+  fromBlock?: bigint;
+  /** Policy ids already known from a previous run's persisted scan progress — `listPolicies()` always re-reads their *current* state fresh via `getPolicy`, this just saves re-discovering the id itself via `eth_getLogs`. */
+  knownIds?: string[] | undefined;
 }
 
 // Comfortably under the 10,000-block range many public RPC providers (including
@@ -30,23 +32,33 @@ const LOG_SCAN_CHUNK_BLOCKS = 9_000n;
  * each id's current state is re-read from the contract — the enabled/reward
  * amount shown is always current, even if it's since been updated or
  * disabled.
+ *
+ * The log scan is incremental and resumable: it never re-scans a block range
+ * it already covered (tracked in `scannedThroughBlock`, seeded from
+ * `config.fromBlock` and advanced — and, on a rate limit, *not* rewound — by
+ * every call to `listPolicies()`). Arc testnet's public RPC rate-limits
+ * `eth_getLogs` more tightly than its documented 10,000-block-per-call cap
+ * suggests; a chunk that fails after retries just stops the scan for *this*
+ * call rather than throwing, so a caller always gets the ids discovered so
+ * far (merged with whatever was already known) instead of a hard failure —
+ * the next call picks up exactly where this one left off.
  */
 export class PolicyService {
   private readonly client;
+  private readonly knownIds: Set<bigint>;
+  private scannedThroughBlock: bigint;
 
   constructor(private readonly config: PolicyServiceConfig) {
     this.client = createPublicClient({ transport: http(config.rpcUrl) });
+    this.knownIds = new Set((config.knownIds ?? []).map((id) => BigInt(id)));
+    this.scannedThroughBlock = (config.fromBlock ?? 0n) - 1n;
   }
 
   async listPolicies(): Promise<PolicySummary[]> {
-    const logs = await this.scanPolicyCreatedLogs();
-
-    const ids = [
-      ...new Set(logs.map((log) => log.args.id).filter((id): id is bigint => id !== undefined)),
-    ];
+    await this.scanNewPolicyCreatedLogs();
 
     const policies = await Promise.all(
-      ids.map(async (id) => {
+      [...this.knownIds].map(async (id) => {
         const policy = await withRpcRetries(() =>
           this.client.readContract({
             address: this.config.rewardPolicyAddress,
@@ -68,34 +80,57 @@ export class PolicyService {
     return policies.sort((a, b) => Number(b.id) - Number(a.id));
   }
 
+  /** Snapshot of scan progress worth persisting across restarts — see `snapshotStore.ts`. */
+  getScanProgress(): { knownIds: string[]; scannedThroughBlock: string } {
+    return {
+      knownIds: [...this.knownIds].map((id) => id.toString()),
+      scannedThroughBlock: this.scannedThroughBlock.toString(),
+    };
+  }
+
   /**
-   * `eth_getLogs` is capped to a fixed block range on many providers (Arc
-   * testnet included, at 10,000 blocks) — scanning `fromBlock: 0n` in one call
-   * breaks the moment a chain has meaningful history. This walks the range in
-   * chunks instead, starting from the contract's deployment block rather than
-   * genesis.
+   * Walks forward from `scannedThroughBlock + 1` to the chain tip in chunks,
+   * adding any newly discovered policy ids to `knownIds`. Stops (without
+   * throwing) at the first chunk that still fails after `withRpcRetries`
+   * exhausts its attempts, leaving `scannedThroughBlock` at the last chunk
+   * that actually succeeded.
    */
-  private async scanPolicyCreatedLogs() {
-    const fromBlock = this.config.deployedAtBlock ?? 0n;
+  private async scanNewPolicyCreatedLogs(): Promise<void> {
     const latestBlock = await withRpcRetries(() => this.client.getBlockNumber());
 
-    const logs = [];
-    for (let start = fromBlock; start <= latestBlock; start += LOG_SCAN_CHUNK_BLOCKS) {
+    for (
+      let start = this.scannedThroughBlock + 1n;
+      start <= latestBlock;
+      start += LOG_SCAN_CHUNK_BLOCKS
+    ) {
       const end =
         start + LOG_SCAN_CHUNK_BLOCKS - 1n > latestBlock
           ? latestBlock
           : start + LOG_SCAN_CHUNK_BLOCKS - 1n;
-      const chunk = await withRpcRetries(() =>
-        this.client.getContractEvents({
-          address: this.config.rewardPolicyAddress,
-          abi: rewardPolicyAbi,
-          eventName: 'PolicyCreated',
-          fromBlock: start,
-          toBlock: end,
-        }),
-      );
-      logs.push(...chunk);
+      let chunk;
+      try {
+        chunk = await withRpcRetries(() =>
+          this.client.getContractEvents({
+            address: this.config.rewardPolicyAddress,
+            abi: rewardPolicyAbi,
+            eventName: 'PolicyCreated',
+            fromBlock: start,
+            toBlock: end,
+          }),
+        );
+      } catch (error) {
+        console.error(
+          `PolicyService: stopped scanning at block ${start.toString()} (resumes here next call):`,
+          error,
+        );
+        return;
+      }
+      for (const log of chunk) {
+        if (log.args.id !== undefined) {
+          this.knownIds.add(log.args.id);
+        }
+      }
+      this.scannedThroughBlock = end;
     }
-    return logs;
   }
 }

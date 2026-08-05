@@ -19,3 +19,10 @@ ignition/deployments/
 
 Documents/
 dashboardview.png
+.github/instructions/
+.github/copilot-instructions.md
+
+# Local-only cache of the backend's read models + chain-scan progress, so a
+# restart doesn't need to re-scan full history from each contract's
+# deployment block (see apps/backend/src/services/snapshotStore.ts).
+apps/backend/.store-snapshot.json

@@ -159,7 +159,27 @@ An Express API that also runs the agent process:
 - `services/policyService.ts` — reads `RewardPolicy` for the Admin
   Dashboard. Since the contract only exposes `getPolicy(id)` (per spec),
   this replays `PolicyCreated` events to discover known ids, then re-reads
-  each one's current state.
+  each one's current state. The event replay is incremental and resumable
+  (`scannedThroughBlock`, seeded from a persisted cursor when one exists)
+  and tolerates a rate-limited chunk by returning whatever it found so far
+  instead of throwing — see `docs/decisions.md`.
+- `services/snapshotStore.ts` — reads/writes `apps/backend/.store-snapshot.json`
+  (gitignored), the one small JSON file standing in for a database: the
+  `Store`'s read models plus each chain scan's `scannedThroughBlock` cursor,
+  so a restart resumes instead of losing history or re-scanning from each
+  contract's deployment block. See `docs/decisions.md`.
+- `services/rpcRetry.ts` — `withRpcRetries`, a shared pacer + exponential
+  backoff every RPC call in this file goes through, so `PolicyService` and
+  `HistoryService`'s chunked scans collectively stay under Arc testnet's
+  public RPC rate limit instead of each retrying independently and
+  re-tripping it.
+- `services/historyService.ts` — `HistoryService`, backfills
+  `AttestationSubmitted`/`RewardEligible` history from chain into the
+  `Store` at startup. Incremental and resumable (same pattern as
+  `policyService.ts` below); deliberately read-only, never re-enters
+  `runAgent`'s fraud/settlement pipeline — see its docstring for why
+  replaying a historical `RewardEligible` through that path would risk a
+  duplicate payment.
 - `services/walletService.ts` — brokers Circle User-Controlled Wallets: user
   sessions, wallet-creation challenges (now `accountType: 'SCA'` for Gas
   Station eligibility), and contract-execution challenges (for attestation

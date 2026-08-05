@@ -5,6 +5,7 @@ import { createAttestationReader } from './services/attestationReader.js';
 import { HistoryService } from './services/historyService.js';
 import { PolicyService } from './services/policyService.js';
 import { RiskAnalysisService } from './services/riskAnalysisService.js';
+import { loadSnapshot, saveSnapshot } from './services/snapshotStore.js';
 import { WalletService } from './services/walletService.js';
 import { createServer } from './server.js';
 import { Store } from './store.js';
@@ -15,10 +16,20 @@ try {
   // No .env file present; fall back to whatever is already in process.env.
 }
 
+/** One past a persisted cursor, or `fallback` (usually the contract's deployment block) if there isn't one yet. */
+function resumeFrom(cursor: string | undefined, fallback: bigint): bigint {
+  return cursor !== undefined ? BigInt(cursor) + 1n : fallback;
+}
+
 async function main(): Promise<void> {
   const config = loadServerConfig();
   const agentConfig = parseAgentConfig(config.agentConfig);
+  const snapshot = loadSnapshot();
+
   const store = new Store();
+  if (snapshot) {
+    store.restore(snapshot);
+  }
 
   const treasuryService = createTreasuryService(
     { rpcUrl: config.rpcUrl, chainId: config.chainId },
@@ -28,7 +39,11 @@ async function main(): Promise<void> {
   const policyService = new PolicyService({
     rpcUrl: config.rpcUrl,
     rewardPolicyAddress: config.rewardPolicyAddress,
-    deployedAtBlock: config.rewardPolicyDeployedAtBlock,
+    fromBlock: resumeFrom(
+      snapshot?.scannedThroughBlock.rewardPolicy,
+      config.rewardPolicyDeployedAtBlock,
+    ),
+    knownIds: snapshot?.knownPolicyIds,
   });
   const walletService: WalletService | undefined = config.embeddedWallet
     ? new WalletService({
@@ -44,34 +59,50 @@ async function main(): Promise<void> {
     attestationRegistryAddress: config.attestationRegistryAddress,
   });
 
-  // Populate the in-memory Store from chain history before starting the live
-  // watchers below, so a backend restart doesn't lose everything it already
-  // observed. Deliberately read-only — see `HistoryService`'s docstring for
-  // why it must never re-enter the fraud/settlement pipeline, and awaited
-  // here (not fire-and-forget) so its block-number snapshot is guaranteed to
-  // predate `runAgent`'s live subscriptions below, closing the only realistic
-  // window where the two could otherwise observe the same event twice.
+  // Populate the Store from chain history before starting the live watchers
+  // below, so a backend restart doesn't lose everything it already observed.
+  // Deliberately read-only — see `HistoryService`'s docstring for why it
+  // must never re-enter the fraud/settlement pipeline — and awaited here
+  // (not fire-and-forget) so its block-number snapshot is guaranteed to
+  // predate `runAgent`'s live subscriptions below, closing the only
+  // realistic window where the two could otherwise observe the same event
+  // twice. Resumes from the persisted snapshot's cursor when there is one,
+  // so only a fresh install ever pays for the full historical scan.
   const historyService = new HistoryService({
     rpcUrl: config.rpcUrl,
     attestationRegistryAddress: config.attestationRegistryAddress,
     rewardDispatcherAddress: config.rewardDispatcherAddress,
-    attestationRegistryDeployedAtBlock: config.attestationRegistryDeployedAtBlock,
-    rewardDispatcherDeployedAtBlock: config.rewardDispatcherDeployedAtBlock,
+    attestationRegistryFromBlock: resumeFrom(
+      snapshot?.scannedThroughBlock.attestationRegistry,
+      config.attestationRegistryDeployedAtBlock,
+    ),
+    rewardDispatcherFromBlock: resumeFrom(
+      snapshot?.scannedThroughBlock.rewardDispatcher,
+      config.rewardDispatcherDeployedAtBlock,
+    ),
   });
-  const [historicalAttestations, historicalRewards] = await Promise.all([
-    historyService.listHistoricalAttestations().catch((error: unknown) => {
+  // Sequential, not Promise.all: both scans funnel through the same shared
+  // RPC pacer (`rpcRetry.ts`) regardless, so running them one after another
+  // instead of concurrently doesn't cost real time — it just keeps the
+  // startup log readable and avoids two chunk loops interleaving their
+  // requests through the gate at once.
+  const attestationBackfill = await historyService
+    .listHistoricalAttestations()
+    .catch((error: unknown) => {
       console.error('Failed to backfill attestation history:', error);
-      return [];
-    }),
-    historyService.listHistoricalRewards().catch((error: unknown) => {
-      console.error('Failed to backfill reward history:', error);
-      return [];
-    }),
-  ]);
-  for (const attestation of historicalAttestations) {
+      return {
+        attestations: [],
+        scannedThroughBlock: config.attestationRegistryDeployedAtBlock - 1n,
+      };
+    });
+  const rewardBackfill = await historyService.listHistoricalRewards().catch((error: unknown) => {
+    console.error('Failed to backfill reward history:', error);
+    return { rewards: [], scannedThroughBlock: config.rewardDispatcherDeployedAtBlock - 1n };
+  });
+  for (const attestation of attestationBackfill.attestations) {
     store.addAttestation(attestation);
   }
-  for (const reward of historicalRewards) {
+  for (const reward of rewardBackfill.rewards) {
     store.createPendingPayment({
       rewardId: reward.rewardId,
       attestationId: reward.attestationId ?? 'unknown',
@@ -81,8 +112,32 @@ async function main(): Promise<void> {
     });
   }
   console.log(
-    `Backfilled ${historicalAttestations.length.toString()} attestation(s) and ${historicalRewards.length.toString()} reward(s) from chain history.`,
+    `Backfilled ${attestationBackfill.attestations.length.toString()} attestation(s) and ${rewardBackfill.rewards.length.toString()} reward(s) from chain history (scanned through block ${attestationBackfill.scannedThroughBlock.toString()} / ${rewardBackfill.scannedThroughBlock.toString()}).`,
   );
+
+  /**
+   * Flushes everything worth surviving a restart to disk: the Store's read
+   * models, `PolicyService`'s incremental scan progress (which advances on
+   * every `/api/policies` call, not just here), and the two history-scan
+   * cursors from this run's backfill. Called after the initial backfill,
+   * then periodically, and on shutdown — not on every single mutation,
+   * since a demo-scale event volume doesn't need that and periodic flushing
+   * keeps disk writes cheap.
+   */
+  const persistSnapshot = () => {
+    const policyProgress = policyService.getScanProgress();
+    saveSnapshot({
+      ...store.toSnapshotData(),
+      knownPolicyIds: policyProgress.knownIds,
+      scannedThroughBlock: {
+        attestationRegistry: attestationBackfill.scannedThroughBlock.toString(),
+        rewardDispatcher: rewardBackfill.scannedThroughBlock.toString(),
+        rewardPolicy: policyProgress.scannedThroughBlock,
+      },
+    });
+  };
+  persistSnapshot();
+  const persistInterval = setInterval(persistSnapshot, 20_000);
 
   const agentControl = runAgent(config.agentConfig, {
     onAttestation: (attestation) => {
@@ -198,6 +253,8 @@ async function main(): Promise<void> {
   });
 
   const shutdown = () => {
+    clearInterval(persistInterval);
+    persistSnapshot();
     agentControl.stop();
     server.close(() => process.exit(0));
   };
