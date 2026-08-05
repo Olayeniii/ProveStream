@@ -42,7 +42,9 @@ export function LandingPage({ env, api }: { env: AppEnv; api: ApiClient }) {
       .listPayments()
       .then((payments) => {
         const suppliers = new Set(
-          payments.filter((payment) => payment.status === 'complete').map((payment) => payment.supplier),
+          payments
+            .filter((payment) => payment.status === 'complete')
+            .map((payment) => payment.supplier),
         );
         setSuppliersPaid(suppliers.size);
       })
@@ -52,7 +54,10 @@ export function LandingPage({ env, api }: { env: AppEnv; api: ApiClient }) {
   const stats = [
     { label: 'Policies', value: policies.length.toString() },
     { label: 'Attestations', value: attestations.length.toString() },
-    { label: 'Suppliers Paid', value: suppliersPaid !== undefined ? suppliersPaid.toString() : '—' },
+    {
+      label: 'Suppliers Paid',
+      value: suppliersPaid !== undefined ? suppliersPaid.toString() : '—',
+    },
     { label: 'Network', value: networkLabel(env.chainId) },
     { label: 'Treasury', value: treasury !== undefined ? `${treasury} USDC` : '—' },
   ];
@@ -81,8 +86,8 @@ export function LandingPage({ env, api }: { env: AppEnv; api: ApiClient }) {
         </Headline>
 
         <Tagline>
-          An autonomous USDC settlement engine on Circle&apos;s Arc chain. An auditor attests, AI and
-          on-chain checks review it, and the supplier gets paid — no human in the loop for the
+          An autonomous USDC settlement engine on Circle&apos;s Arc chain. An auditor attests, AI
+          and on-chain checks review it, and the supplier gets paid — no human in the loop for the
           normal case, real money moving on a real chain.
         </Tagline>
 
@@ -184,27 +189,13 @@ const Hero = styled.div`
   padding: 64px 24px;
 `;
 
-const Badge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border-radius: ${(props) => props.theme.radius.pill};
-  border: 1px solid ${(props) => props.theme.colors.border};
-  background: ${(props) => props.theme.colors.surfaceMuted};
-  color: ${(props) => props.theme.colors.textMuted};
-  font-family: ${(props) => props.theme.monoFontFamily};
-  font-size: 0.78rem;
-`;
-
 const Headline = styled.h1`
   margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: clamp(2.4rem, 6vw, 4rem);
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  max-width: 720px;
+  font-size: clamp(2rem, 4.5vw, 3rem);
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
   color: ${(props) => props.theme.colors.text};
 `;
 
