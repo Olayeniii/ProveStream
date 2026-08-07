@@ -344,6 +344,11 @@ const Button = styled.button`
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
+  transition: transform 160ms ease-out;
+
+  &:active {
+    transform: scale(0.97);
+  }
 
   &:disabled {
     opacity: 0.6;
@@ -366,6 +371,11 @@ const EditButton = styled.button`
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
+  transition: transform 160ms ease-out;
+
+  &:active {
+    transform: scale(0.97);
+  }
 
   &:disabled {
     opacity: 0.6;

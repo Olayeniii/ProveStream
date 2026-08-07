@@ -1,4 +1,4 @@
-import styled from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 
 import { formatRelativeTime, formatReward } from '../../lib/format.js';
 import type { Stream, StreamTone } from '../../lib/streams.js';
@@ -53,6 +53,20 @@ export function StreamCard({
   );
 }
 
+const fadeIn = keyframes`
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
+
+// Staggers the first N cards in a grid/list on mount; beyond that, cards appear
+// together rather than making a long list take seconds to finish entering.
+const STAGGER_MAX_CARDS = 8;
+const STAGGER_STEP_MS = 50;
+const staggerRules = Array.from(
+  { length: STAGGER_MAX_CARDS },
+  (_, index) => `&:nth-child(${index + 1}) { animation-delay: ${index * STAGGER_STEP_MS}ms; }`,
+).join('\n');
+
 const Card = styled.div<{ $selected?: boolean | undefined; $clickable?: boolean | undefined }>`
   text-align: left;
   cursor: ${(props) => (props.$clickable ? 'pointer' : 'default')};
@@ -66,6 +80,20 @@ const Card = styled.div<{ $selected?: boolean | undefined; $clickable?: boolean 
   gap: 8px;
   width: 100%;
   font-family: inherit;
+  transition: transform 160ms ease-out;
+
+  ${(props) =>
+    props.$clickable &&
+    `
+  &:active {
+    transform: scale(0.98);
+  }
+  `}
+
+  @media (prefers-reduced-motion: no-preference) {
+    animation: ${fadeIn} 300ms ease-out backwards;
+    ${staggerRules}
+  }
 `;
 
 const TopRow = styled.div`

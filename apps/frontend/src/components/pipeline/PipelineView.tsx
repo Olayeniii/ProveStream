@@ -185,7 +185,7 @@ const Connector = styled.div<{ $filled: boolean; $pulsing: boolean }>`
     }
 
     @media (prefers-reduced-motion: no-preference) {
-      animation: ${travel} 1.2s ease-in-out infinite;
+      animation: ${travel} 1.2s linear infinite;
     }
   }
 

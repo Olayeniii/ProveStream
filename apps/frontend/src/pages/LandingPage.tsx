@@ -189,6 +189,11 @@ const LaunchButtonSmall = styled.a`
   font-size: 0.85rem;
   font-weight: 600;
   text-decoration: none;
+  transition: transform 160ms ease-out;
+
+  &:active {
+    transform: scale(0.97);
+  }
 `;
 
 const Hero = styled.div`
@@ -249,6 +254,11 @@ const PrimaryCta = styled.a`
   font-size: 0.95rem;
   font-weight: 700;
   text-decoration: none;
+  transition: transform 160ms ease-out;
+
+  &:active {
+    transform: scale(0.97);
+  }
 `;
 
 const SecondaryCta = styled(Link)`
@@ -263,6 +273,11 @@ const SecondaryCta = styled(Link)`
   font-size: 0.95rem;
   font-weight: 600;
   text-decoration: none;
+  transition: transform 160ms ease-out;
+
+  &:active {
+    transform: scale(0.97);
+  }
 `;
 
 const StatsRow = styled.div`

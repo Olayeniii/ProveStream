@@ -60,9 +60,9 @@ export function HowItWorksPage({ env, api }: { env: AppEnv; api: ApiClient }) {
       api={api}
     >
       <Intro>
-        This app pays suppliers automatically once their work is verified, so no one has to
-        manually process a payout for the normal case. Here&apos;s what actually happens behind
-        the scenes, step by step.
+        This app pays suppliers automatically once their work is verified, so no one has to manually
+        process a payout for the normal case. Here&apos;s what actually happens behind the scenes,
+        step by step.
       </Intro>
 
       <StepList>

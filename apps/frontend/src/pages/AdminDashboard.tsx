@@ -391,6 +391,11 @@ const ApproveButton = styled.button`
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
+  transition: transform 160ms ease-out;
+
+  &:active {
+    transform: scale(0.97);
+  }
 `;
 
 const RejectButton = styled.button`
@@ -402,6 +407,11 @@ const RejectButton = styled.button`
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
+  transition: transform 160ms ease-out;
+
+  &:active {
+    transform: scale(0.97);
+  }
 `;
 
 const StatusLabel = styled.span<{ $status: FraudAlert['status'] }>`

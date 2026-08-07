@@ -168,6 +168,11 @@ const SubmitButton = styled.button`
   font-size: 0.9rem;
   cursor: pointer;
   white-space: nowrap;
+  transition: transform 160ms ease-out;
+
+  &:active {
+    transform: scale(0.97);
+  }
 
   &:disabled {
     opacity: 0.6;

@@ -203,9 +203,14 @@ const IconButton = styled.button<{ $tone?: 'danger' }>`
   cursor: pointer;
   color: ${(props) => props.theme.colors.textMuted};
   text-decoration: none;
+  transition: transform 160ms ease-out;
 
   &:hover {
     color: ${(props) => (props.$tone === 'danger' ? props.theme.colors.error : props.theme.colors.primary)};
+  }
+
+  &:active {
+    transform: scale(0.95);
   }
 `;
 

@@ -267,8 +267,13 @@ async function main(): Promise<void> {
               return result;
             })
             .catch((error: unknown) => {
+              // Each provider's raw error (status codes, quota details, model ids) is
+              // already logged as it happens inside RiskAnalysisService — what reaches
+              // the store/UI here must stay a clean, model-agnostic message; never the
+              // raw multi-provider dump `error` carries.
+              console.error('Risk analysis unavailable for attestation', attestationId, error);
               store.updateRiskAnalysisStatus(attestationId, 'failed', {
-                error: error instanceof Error ? error.message : 'Risk analysis failed.',
+                error: 'AI risk analysis is temporarily unavailable.',
               });
               return undefined;
             });
