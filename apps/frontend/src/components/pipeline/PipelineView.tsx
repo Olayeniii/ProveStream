@@ -123,7 +123,7 @@ const NodeCircle = styled.div<{ $status: NodeStatus; $color: NodeColor }>`
         ? props.theme.colors.error
         : props.$status === 'attention'
           ? props.theme.colors.coral
-          : '#fff'};
+          : props.theme.colors.primaryText};
   background: ${(props) =>
     props.$status === 'complete' || props.$status === 'active'
       ? props.theme.colors[props.$color]
@@ -176,7 +176,17 @@ const Connector = styled.div<{ $filled: boolean; $pulsing: boolean }>`
     inset: 0;
     width: 40%;
     background: ${(props) => props.theme.colors.primary};
-    animation: ${travel} 1.2s ease-in-out infinite;
+
+    /* Still show which connector is active without motion, per the reduced-motion
+       requirement in the design system — a static highlight instead of the loop. */
+    @media (prefers-reduced-motion: reduce) {
+      width: 100%;
+      opacity: 0.6;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      animation: ${travel} 1.2s ease-in-out infinite;
+    }
   }
 
   @media (max-width: 900px) {

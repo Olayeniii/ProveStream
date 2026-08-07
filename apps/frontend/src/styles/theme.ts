@@ -22,6 +22,13 @@ export const theme = {
     // Design-language 1.3: Coral = attention, needs review, not failure.
     // Red is reserved for genuine failures only — kept distinct from coral.
     error: '#EF4444',
+
+    // Readable text shades for status badges/labels rendered on a tinted tone
+    // background (mint/gold/coral) — the base palette colors above are too
+    // light on their own for text at small sizes.
+    positiveText: '#166534',
+    warningText: '#92400E',
+    attentionText: '#9A3412',
   },
   radius: {
     pill: '999px',

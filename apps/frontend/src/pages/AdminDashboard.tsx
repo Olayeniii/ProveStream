@@ -12,11 +12,25 @@ import { AppShell } from '../components/AppShell.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, AttestationRecord } from '../lib/api.js';
 import { formatRelativeTime } from '../lib/format.js';
+import type { StreamTone } from '../lib/streams.js';
+import { getToneColor } from '../lib/tone.js';
 
 interface HealthState {
   backend: 'ok' | 'error' | 'checking';
   treasury: 'ok' | 'error' | 'checking';
 }
+
+const HEALTH_STATUS_TONE: Record<HealthState['backend'], StreamTone> = {
+  ok: 'positive',
+  error: 'negative',
+  checking: 'neutral',
+};
+
+const FRAUD_ALERT_STATUS_TONE: Record<FraudAlert['status'], StreamTone> = {
+  approved: 'positive',
+  flagged: 'negative',
+  rejected: 'negative',
+};
 
 const JOB_STATE_LABEL: Record<SettlementJobRecord['state'], string> = {
   queued: 'Queued',
@@ -109,11 +123,11 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
       <Card>
         <SectionTitle>Health</SectionTitle>
         <HealthRow>
-          <HealthItem status={health.backend}>
+          <HealthItem $status={health.backend}>
             {health.backend === 'ok' ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
             Backend API
           </HealthItem>
-          <HealthItem status={health.treasury}>
+          <HealthItem $status={health.treasury}>
             {health.treasury === 'ok' ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
             Treasury service
           </HealthItem>
@@ -172,7 +186,7 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
                     </RejectButton>
                   </ActionRow>
                 ) : (
-                  <StatusLabel status={alert.status}>{alert.status}</StatusLabel>
+                  <StatusLabel $status={alert.status}>{alert.status}</StatusLabel>
                 )}
               </AlertItem>
             ))}
@@ -260,17 +274,12 @@ const HealthRow = styled.div`
   flex-wrap: wrap;
 `;
 
-const HealthItem = styled.div<{ status: 'ok' | 'error' | 'checking' }>`
+const HealthItem = styled.div<{ $status: 'ok' | 'error' | 'checking' }>`
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 0.9rem;
-  color: ${(props) =>
-    props.status === 'ok'
-      ? '#166534'
-      : props.status === 'error'
-        ? props.theme.colors.error
-        : props.theme.colors.textMuted};
+  color: ${(props) => getToneColor(props.theme, HEALTH_STATUS_TONE[props.$status]).text};
 `;
 
 const StatRow = styled.div`
@@ -395,10 +404,10 @@ const RejectButton = styled.button`
   cursor: pointer;
 `;
 
-const StatusLabel = styled.span<{ status: FraudAlert['status'] }>`
+const StatusLabel = styled.span<{ $status: FraudAlert['status'] }>`
   align-self: flex-start;
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: ${(props) => (props.status === 'approved' ? '#166534' : props.theme.colors.error)};
+  color: ${(props) => getToneColor(props.theme, FRAUD_ALERT_STATUS_TONE[props.$status]).text};
 `;

@@ -7,6 +7,14 @@ import { UsdcIcon } from '../components/UsdcIcon.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, TreasuryBalance } from '../lib/api.js';
 import { formatAmount, formatReward } from '../lib/format.js';
+import type { StreamTone } from '../lib/streams.js';
+import { getToneColor } from '../lib/tone.js';
+
+const PAYMENT_STATUS_TONE: Record<Payment['status'], StreamTone> = {
+  complete: 'positive',
+  failed: 'attention',
+  pending: 'neutral',
+};
 
 export function TreasuryPage({ env, api }: { env: AppEnv; api: ApiClient }) {
   const [treasury, setTreasury] = useState<TreasuryBalance | undefined>(undefined);
@@ -47,7 +55,7 @@ export function TreasuryPage({ env, api }: { env: AppEnv; api: ApiClient }) {
             {payments.slice(0, 20).map((payment) => (
               <ListItem key={payment.rewardId}>
                 <span>Reward #{payment.rewardId}</span>
-                <StatusBadge status={payment.status}>{payment.status}</StatusBadge>
+                <StatusBadge $status={payment.status}>{payment.status}</StatusBadge>
                 <span>{formatReward(payment.rewardAmount)}</span>
                 <span>Supplier {payment.supplier}</span>
               </ListItem>
@@ -107,20 +115,10 @@ const ListItem = styled.li`
   border-bottom: 1px solid ${(props) => props.theme.colors.border};
 `;
 
-const StatusBadge = styled.span<{ status: Payment['status'] }>`
+const StatusBadge = styled.span<{ $status: Payment['status'] }>`
   padding: 2px 10px;
   border-radius: ${(props) => props.theme.radius.pill};
   font-size: 0.75rem;
-  color: ${(props) =>
-    props.status === 'complete'
-      ? '#166534'
-      : props.status === 'failed'
-        ? '#9A3412'
-        : props.theme.colors.textMuted};
-  background: ${(props) =>
-    props.status === 'complete'
-      ? `${props.theme.colors.mint}33`
-      : props.status === 'failed'
-        ? `${props.theme.colors.coral}33`
-        : props.theme.colors.surfaceMuted};
+  color: ${(props) => getToneColor(props.theme, PAYMENT_STATUS_TONE[props.$status]).text};
+  background: ${(props) => getToneColor(props.theme, PAYMENT_STATUS_TONE[props.$status]).background};
 `;

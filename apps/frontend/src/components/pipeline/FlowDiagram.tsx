@@ -82,7 +82,7 @@ const NodeCircle = styled.div<{ $color: 'primary' | 'mint' | 'violet' | 'gold' }
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: ${(props) => props.theme.colors.primaryText};
   background: ${(props) => props.theme.colors[props.$color]};
 `;
 

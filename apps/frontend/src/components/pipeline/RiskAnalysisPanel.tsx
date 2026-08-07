@@ -1,16 +1,20 @@
 import { Cpu } from 'lucide-react';
 import styled from 'styled-components';
 
-import type { Stream } from '../../lib/streams.js';
+import type { Stream, StreamTone } from '../../lib/streams.js';
+import { getToneColor } from '../../lib/tone.js';
 
-function riskLabel(score: number): { label: string; tone: 'positive' | 'warning' | 'negative' } {
+type RiskTone = Extract<StreamTone, 'positive' | 'warning' | 'attention'>;
+
+/** High risk is coral/`attention` — needs review, same design-language rule as elsewhere: not a hard failure, since a flagged payout can still be approved. */
+function riskLabel(score: number): { label: string; tone: RiskTone } {
   if (score < 30) {
     return { label: 'Low Risk', tone: 'positive' };
   }
   if (score < 70) {
     return { label: 'Medium Risk', tone: 'warning' };
   }
-  return { label: 'High Risk', tone: 'negative' };
+  return { label: 'High Risk', tone: 'attention' };
 }
 
 export function RiskAnalysisPanel({ stream }: { stream: Stream }) {
@@ -136,7 +140,7 @@ const GaugeRow = styled.div`
   gap: 6px;
 `;
 
-const Gauge = styled.div<{ $percent: number; $tone: 'positive' | 'warning' | 'negative' }>`
+const Gauge = styled.div<{ $percent: number; $tone: RiskTone }>`
   width: 108px;
   height: 108px;
   border-radius: 999px;
@@ -173,11 +177,10 @@ const GaugeValue = styled.span`
   color: ${(props) => props.theme.colors.text};
 `;
 
-const GaugeCaption = styled.span<{ $tone: 'positive' | 'warning' | 'negative' }>`
+const GaugeCaption = styled.span<{ $tone: RiskTone }>`
   font-size: 0.85rem;
   font-weight: 600;
-  color: ${(props) =>
-    props.$tone === 'positive' ? '#166534' : props.$tone === 'warning' ? '#92400E' : '#9A3412'};
+  color: ${(props) => getToneColor(props.theme, props.$tone).text};
 `;
 
 const Summary = styled.p`

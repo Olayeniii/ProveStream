@@ -9,6 +9,7 @@ import type { AppEnv } from '../env.js';
 import type { ApiClient, PolicySummary } from '../lib/api.js';
 import { formatReward } from '../lib/format.js';
 import { connectWallet, getPublicClient } from '../lib/clients.js';
+import { getToneColor } from '../lib/tone.js';
 
 export function PoliciesPage({ env, api }: { env: AppEnv; api: ApiClient }) {
   const [policies, setPolicies] = useState<PolicySummary[]>([]);
@@ -209,7 +210,7 @@ const StatusBadge = styled.span<{ $enabled: boolean }>`
   padding: 2px 10px;
   border-radius: ${(props) => props.theme.radius.pill};
   font-size: 0.75rem;
-  color: ${(props) => (props.$enabled ? '#166534' : props.theme.colors.textMuted)};
+  color: ${(props) => getToneColor(props.theme, props.$enabled ? 'positive' : 'neutral').text};
   background: ${(props) =>
-    props.$enabled ? `${props.theme.colors.mint}33` : props.theme.colors.surfaceMuted};
+    getToneColor(props.theme, props.$enabled ? 'positive' : 'neutral').background};
 `;

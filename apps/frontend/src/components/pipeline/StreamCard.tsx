@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { formatRelativeTime, formatReward } from '../../lib/format.js';
 import type { Stream, StreamTone } from '../../lib/streams.js';
 import { getOverallStatus } from '../../lib/streams.js';
+import { getToneColor } from '../../lib/tone.js';
 
 function latestTimestamp(stream: Stream): string | undefined {
   const timestamps = stream.nodes
@@ -86,26 +87,8 @@ const Badge = styled.span<{ $tone: StreamTone }>`
   font-size: 0.72rem;
   font-weight: 600;
   white-space: nowrap;
-  color: ${(props) =>
-    props.$tone === 'positive'
-      ? '#166534'
-      : props.$tone === 'warning'
-        ? '#92400E'
-        : props.$tone === 'attention'
-          ? '#9A3412'
-          : props.$tone === 'negative'
-            ? props.theme.colors.error
-            : props.theme.colors.textMuted};
-  background: ${(props) =>
-    props.$tone === 'positive'
-      ? `${props.theme.colors.mint}33`
-      : props.$tone === 'warning'
-        ? `${props.theme.colors.gold}33`
-        : props.$tone === 'attention'
-          ? `${props.theme.colors.coral}33`
-          : props.$tone === 'negative'
-            ? `${props.theme.colors.error}1a`
-            : props.theme.colors.surfaceMuted};
+  color: ${(props) => getToneColor(props.theme, props.$tone).text};
+  background: ${(props) => getToneColor(props.theme, props.$tone).background};
 `;
 
 const Subtitle = styled.span`
