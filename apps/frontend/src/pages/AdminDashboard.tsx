@@ -194,7 +194,7 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
         )}
       </Card>
 
-      <Card>
+      <Section>
         <SectionTitle>Settlement queue</SectionTitle>
         {settlementQueue.length === 0 ? (
           <Empty>No settlement jobs observed yet.</Empty>
@@ -211,9 +211,9 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
             ))}
           </List>
         )}
-      </Card>
+      </Section>
 
-      <Card>
+      <Section>
         <SectionTitle>Recent bridge operations</SectionTitle>
         {bridgeOperations.length === 0 ? (
           <Empty>No cross-chain settlements yet.</Empty>
@@ -229,9 +229,9 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
             ))}
           </List>
         )}
-      </Card>
+      </Section>
 
-      <Card>
+      <Section>
         <SectionTitle>Auditors</SectionTitle>
         {auditors.length === 0 ? (
           <Empty>No attestations observed yet.</Empty>
@@ -247,7 +247,7 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
             ))}
           </List>
         )}
-      </Card>
+      </Section>
     </AppShell>
   );
 }
@@ -257,6 +257,15 @@ const Card = styled.div`
   border: 1px solid ${(props) => props.theme.colors.border};
   border-radius: ${(props) => props.theme.radius.card};
   padding: ${(props) => props.theme.spacing.cardPadding};
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+`;
+
+// Plain listing content, unlike Card above — no border/background/elevation.
+// Elevation should signal "you can act here" (Health, Fraud alerts); a
+// read-only list doesn't need a box around it, just a heading and divide-y rows.
+const Section = styled.div`
   display: flex;
   flex-direction: column;
   gap: 16px;

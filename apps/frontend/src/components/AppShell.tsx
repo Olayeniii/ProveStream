@@ -18,6 +18,7 @@ import styled from 'styled-components';
 import { formatUnits } from 'viem';
 
 import logo from '../assets/logo.png';
+import { Skeleton } from './Skeleton.js';
 import { UsdcIcon } from './UsdcIcon.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient } from '../lib/api.js';
@@ -111,7 +112,11 @@ export function AppShell({
               )}
             </WidgetValue>
             <WidgetCaption>
-              {streamCount !== undefined ? `Across ${streamCount} streams` : 'Loading…'}
+              {streamCount !== undefined ? (
+                `Across ${streamCount} streams`
+              ) : (
+                <Skeleton $width="80px" $height="0.85em" />
+              )}
             </WidgetCaption>
           </Widget>
           <Widget>

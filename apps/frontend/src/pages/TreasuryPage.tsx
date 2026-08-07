@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import styled from 'styled-components';
 
 import { AppShell } from '../components/AppShell.js';
+import { Skeleton } from '../components/Skeleton.js';
 import { UsdcIcon } from '../components/UsdcIcon.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, TreasuryBalance } from '../lib/api.js';
@@ -41,12 +42,12 @@ export function TreasuryPage({ env, api }: { env: AppEnv; api: ApiClient }) {
               <UsdcIcon /> {formatAmount(treasury.amount, 4)} USDC
             </>
           ) : (
-            'Loading…'
+            <Skeleton $width="140px" $height="1.4rem" />
           )}
         </BalanceValue>
       </Card>
 
-      <Card>
+      <Section>
         <SectionTitle>Recent settlements</SectionTitle>
         {payments.length === 0 ? (
           <Empty>No settlements yet.</Empty>
@@ -62,7 +63,7 @@ export function TreasuryPage({ env, api }: { env: AppEnv; api: ApiClient }) {
             ))}
           </List>
         )}
-      </Card>
+      </Section>
     </AppShell>
   );
 }
@@ -72,6 +73,15 @@ const Card = styled.div`
   border: 1px solid ${(props) => props.theme.colors.border};
   border-radius: ${(props) => props.theme.radius.card};
   padding: ${(props) => props.theme.spacing.cardPadding};
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+`;
+
+// Plain listing content, unlike Card above — no border/background/elevation.
+// Elevation should signal "you can act here" (see Balance's Card); a read-only
+// list doesn't need a box around it, just a heading and divide-y rows.
+const Section = styled.div`
   display: flex;
   flex-direction: column;
   gap: 16px;

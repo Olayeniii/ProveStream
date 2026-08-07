@@ -66,6 +66,13 @@ export const theme = {
   },
   fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
   monoFontFamily: "'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace",
+  /**
+   * Display voice for brand surfaces only (landing page, How It Works) — per
+   * impeccable's operate.md, product/dashboard UI stays on a single family
+   * (`fontFamily`); a display font in dashboard labels/buttons/data is a named
+   * anti-pattern there. Never reference this outside LandingPage/HowItWorksPage.
+   */
+  displayFontFamily: "'Outfit', 'Inter', system-ui, -apple-system, sans-serif",
 } as const;
 
 export type Theme = typeof theme;

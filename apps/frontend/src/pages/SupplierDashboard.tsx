@@ -12,6 +12,7 @@ import styled from 'styled-components';
 import { AppShell } from '../components/AppShell.js';
 import { EmbeddedWalletLogin } from '../components/EmbeddedWalletLogin.js';
 import { StreamCard } from '../components/pipeline/StreamCard.js';
+import { Skeleton } from '../components/Skeleton.js';
 import { WalletChip } from '../components/WalletChip.js';
 import type { AppEnv } from '../env.js';
 import { useEmbeddedWallet } from '../hooks/useEmbeddedWallet.js';
@@ -161,7 +162,7 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
             </Stat>
             <Stat>
               <StatLabel>USDC balance</StatLabel>
-              <StatValue>{balance ?? 'Loading…'}</StatValue>
+              <StatValue>{balance ?? <Skeleton $width="100px" />}</StatValue>
             </Stat>
           </StatRow>
         </Card>

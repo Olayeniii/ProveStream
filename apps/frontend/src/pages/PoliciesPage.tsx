@@ -98,7 +98,7 @@ export function PoliciesPage({ env, api }: { env: AppEnv; api: ApiClient }) {
         {createError && <ErrorText>{createError}</ErrorText>}
       </Card>
 
-      <Card>
+      <Section>
         <SectionTitle>All policies</SectionTitle>
         {policies.length === 0 ? (
           <Empty>No policies created yet.</Empty>
@@ -116,7 +116,7 @@ export function PoliciesPage({ env, api }: { env: AppEnv; api: ApiClient }) {
             ))}
           </List>
         )}
-      </Card>
+      </Section>
     </AppShell>
   );
 }
@@ -126,6 +126,15 @@ const Card = styled.div`
   border: 1px solid ${(props) => props.theme.colors.border};
   border-radius: ${(props) => props.theme.radius.card};
   padding: ${(props) => props.theme.spacing.cardPadding};
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+`;
+
+// Plain listing content, unlike Card above — no border/background/elevation.
+// Elevation should signal "you can act here" (see the create form's Card); a
+// read-only list doesn't need a box around it, just a heading and divide-y rows.
+const Section = styled.div`
   display: flex;
   flex-direction: column;
   gap: 16px;
