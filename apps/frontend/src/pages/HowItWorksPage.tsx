@@ -17,12 +17,12 @@ const STEPS = [
   {
     icon: FileCheck2,
     title: '1. An auditor submits an attestation',
-    body: "A field auditor signs in with their wallet and records that a supplier met a requirement — for example, that a coffee shipment is certified organic. This is a real, signed transaction on Arc's blockchain, so it can't be faked or edited afterward.",
+    body: "A field auditor signs in with their wallet and records that a supplier met a requirement, for example that a coffee shipment is certified organic. This is a real, signed transaction on Arc's blockchain, so it can't be faked or edited afterward.",
   },
   {
     icon: BadgeCheck,
     title: "2. It's checked against a reward policy",
-    body: 'The system looks up the reward policy the auditor referenced. If it exists and is active, the supplier is eligible for a payout — set by whoever configured the policy (amount, credential type).',
+    body: 'The system looks up the reward policy the auditor referenced. If it exists and is active, the supplier is eligible for a payout, with the amount and credential type set by whoever configured the policy.',
   },
   {
     icon: Bot,
@@ -32,12 +32,12 @@ const STEPS = [
   {
     icon: ShieldCheck,
     title: '4. The signature and fraud checks run',
-    body: "The system independently verifies the attestation was really signed by the auditor it claims — not just trusting what it's told. It also checks the pattern of recent activity (repeated claims, unusual frequency) and holds the payout for review if something looks off.",
+    body: "The system independently verifies the attestation was really signed by the auditor it claims, not just trusting what it's told. It also checks the pattern of recent activity (repeated claims, unusual frequency) and holds the payout for review if something looks off.",
   },
   {
     icon: Landmark,
     title: '5. The treasury approves and pays',
-    body: 'Once everything checks out, the system automatically sends the reward — real USDC — from the treasury wallet to the supplier. No human has to click "approve" for a normal, clean submission.',
+    body: 'Once everything checks out, the system automatically sends the reward, real USDC, from the treasury wallet to the supplier. No human has to click "approve" for a normal, clean submission.',
   },
   {
     icon: Wallet,
@@ -47,7 +47,7 @@ const STEPS = [
   {
     icon: CheckCircle2,
     title: 'If something looks wrong',
-    body: 'A held payout shows up for an admin to review, with the reason attached (AI risk score, unusual pattern, etc). An admin can approve it — releasing the same payment automatically — or reject it, which leaves it unpaid.',
+    body: 'A held payout shows up for an admin to review, with the reason attached (AI risk score, unusual pattern, etc). An admin can approve it (releasing the same payment automatically) or reject it, which leaves it unpaid.',
   },
 ];
 
@@ -60,9 +60,9 @@ export function HowItWorksPage({ env, api }: { env: AppEnv; api: ApiClient }) {
       api={api}
     >
       <Intro>
-        This app pays suppliers automatically once their work is verified — no one has to manually
-        process a payout for the normal case. Here&apos;s what actually happens behind the scenes,
-        step by step.
+        This app pays suppliers automatically once their work is verified, so no one has to
+        manually process a payout for the normal case. Here&apos;s what actually happens behind
+        the scenes, step by step.
       </Intro>
 
       <StepList>
@@ -80,7 +80,7 @@ export function HowItWorksPage({ env, api }: { env: AppEnv; api: ApiClient }) {
       </StepList>
 
       <Note>
-        Every number and status you see elsewhere in this app is real — pulled live from the
+        Every number and status you see elsewhere in this app is real, pulled live from the
         blockchain, the treasury, and whichever AI service answered. Nothing here is a mockup or
         placeholder data.
       </Note>

@@ -58,6 +58,23 @@ export function getOverallStatus(stream: Stream): { label: string; tone: StreamT
   return { label: 'Live', tone: 'neutral' };
 }
 
+/** Drives the StreamOrb's three data-bound layers from a stream's real node state. */
+export function getOrbState(stream: Stream): {
+  verification: number;
+  confidence: number;
+  rewardSettled: boolean;
+} {
+  const byKey = Object.fromEntries(stream.nodes.map((node) => [node.key, node]));
+  const knownNodes = stream.nodes.filter((node) => node.status !== 'unavailable');
+  const completeCount = knownNodes.filter((node) => node.status === 'complete').length;
+
+  return {
+    verification: knownNodes.length > 0 ? (completeCount / knownNodes.length) * 100 : 0,
+    confidence: byKey['ai-risk-analysis']?.confidence ?? 0,
+    rewardSettled: byKey['supplier-paid']?.status === 'complete',
+  };
+}
+
 /**
  * Merges the independent read models the backend already exposes
  * (attestations, policies, payments, risk analyses, signature verifications)

@@ -30,6 +30,20 @@ export const theme = {
     warningText: '#92400E',
     attentionText: '#9A3412',
   },
+
+  /**
+   * Semantic aliases onto the palette above, named for what the Stream Orb's
+   * four layers mean (see "The Provenance Book" / the provenance-streams-design
+   * skill) rather than which hex they happen to be today. Additive only — existing
+   * components keep referencing `colors.*` directly; only new Book-aligned
+   * components (StreamOrb) are written against these.
+   */
+  streamKit: {
+    verification: '#4ADE80', // mint — outer ring
+    confidence: '#3B82F6', // primary blue — inner ring
+    reward: '#FBBF24', // gold — core
+    identity: '#FBBF24', // amber, constant — center dot. Never varies with category.
+  },
   radius: {
     pill: '999px',
     card: '16px',

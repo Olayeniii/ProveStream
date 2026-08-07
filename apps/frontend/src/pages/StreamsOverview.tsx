@@ -9,10 +9,11 @@ import { RewardMetricsStrip } from '../components/pipeline/RewardMetricsStrip.js
 import { RiskAnalysisPanel } from '../components/pipeline/RiskAnalysisPanel.js';
 import { StreamActionsPanel } from '../components/pipeline/StreamActionsPanel.js';
 import { StreamCard } from '../components/pipeline/StreamCard.js';
+import { StreamOrb } from '../components/pipeline/StreamOrb.js';
 import { StreamTimeline } from '../components/pipeline/StreamTimeline.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
-import { buildStreams } from '../lib/streams.js';
+import { buildStreams, getOrbState } from '../lib/streams.js';
 import type { Payment, RiskAnalysis, SignatureVerification } from '@provenance-streams/protocol';
 
 export function StreamsOverview({ env, api }: { env: AppEnv; api: ApiClient }) {
@@ -67,6 +68,7 @@ export function StreamsOverview({ env, api }: { env: AppEnv; api: ApiClient }) {
           {selected && (
             <DetailCard>
               <DetailHeader>
+                <StreamOrb size={64} {...getOrbState(selected)} />
                 <DetailTitle>Attestation #{selected.id}</DetailTitle>
               </DetailHeader>
               <PipelineView nodes={selected.nodes} />
@@ -131,7 +133,7 @@ const DetailCard = styled.div`
 const DetailHeader = styled.div`
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 8px;
 `;
 

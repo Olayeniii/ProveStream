@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import styled from 'styled-components';
 
 import logo from '../assets/logo.png';
+import { StreamOrb } from '../components/pipeline/StreamOrb.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
 import { formatAmount } from '../lib/format.js';
@@ -80,14 +81,21 @@ export function LandingPage({ env, api }: { env: AppEnv; api: ApiClient }) {
       </NavBar>
 
       <Hero>
+        <StreamOrb
+          size={120}
+          verification={attestations.length > 0 ? 100 : 0}
+          confidence={policies.length > 0 ? 100 : 0}
+          rewardSettled={suppliersPaid !== undefined && suppliersPaid > 0}
+        />
+
         <Headline>
           Provenance you can <HAccent1>attest</HAccent1>, <HAccent2>verify</HAccent2>, and{' '}
-          <HAccent3>settle</HAccent3> — autonomously.
+          <HAccent3>settle</HAccent3>, autonomously.
         </Headline>
 
         <Tagline>
           An autonomous USDC settlement engine on Circle&apos;s Arc chain. An auditor attests, AI
-          and on-chain checks review it, and the supplier gets paid — no human in the loop for the
+          and on-chain checks review it, and the supplier gets paid. No human in the loop for the
           normal case, real money moving on a real chain.
         </Tagline>
 
