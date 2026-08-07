@@ -32,17 +32,20 @@ export const theme = {
   },
 
   /**
-   * Semantic aliases onto the palette above, named for what the Stream Orb's
-   * four layers mean (see "The Provenance Book" / the provenance-streams-design
-   * skill) rather than which hex they happen to be today. Additive only — existing
-   * components keep referencing `colors.*` directly; only new Book-aligned
-   * components (StreamOrb) are written against these.
+   * Semantic aliases for the Stream Orb's four layers (see "The Provenance
+   * Book" / the provenance-streams-design skill), deliberately NOT reusing the
+   * bright, separately-hued palette above — three saturated colors on one
+   * small symbol reads as the generic "AI-colorful" default the design-taste-
+   * frontend skill warns against. The rings are muted slate neutrals instead;
+   * gold stays the single accent, carried only by reward/identity, so the eye
+   * has exactly one thing to land on. Additive — existing components keep
+   * referencing `colors.*` directly; only StreamOrb is written against these.
    */
   streamKit: {
-    verification: '#4ADE80', // mint — outer ring
-    confidence: '#3B82F6', // primary blue — inner ring
-    reward: '#FBBF24', // gold — core
-    identity: '#FBBF24', // amber, constant — center dot. Never varies with category.
+    verification: '#1E293B', // slate-800, muted neutral — outer ring
+    confidence: '#94A3B8', // slate-400, lighter neutral — inner ring
+    reward: '#FBBF24', // gold — the one accent: core glow, bloom, identity dot
+    identity: '#FBBF24',
   },
   radius: {
     pill: '999px',
