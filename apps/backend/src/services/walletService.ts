@@ -169,7 +169,10 @@ export class WalletService {
     userToken: string,
     challengeId: string,
     {
-      timeoutMs = 30_000,
+      // Contract-execution challenges route through Gas Station's paymaster/bundler on
+      // top of the SCA wallet's own signing step, which routinely takes longer than a
+      // plain native transfer to surface a hash — 30s was cutting those off early.
+      timeoutMs = 60_000,
       pollIntervalMs = 1_000,
     }: { timeoutMs?: number; pollIntervalMs?: number } = {},
   ): Promise<string> {

@@ -57,27 +57,39 @@ export class PolicyService {
   async listPolicies(): Promise<PolicySummary[]> {
     await this.scanNewPolicyCreatedLogs();
 
-    const policies = await Promise.all(
-      [...this.knownIds].map(async (id) => {
-        const policy = await withRpcRetries(() =>
-          this.client.readContract({
-            address: this.config.rewardPolicyAddress,
-            abi: rewardPolicyAbi,
-            functionName: 'getPolicy',
-            args: [id],
-          }),
-        );
-        return {
-          id: policy.id.toString(),
-          credentialType: decodeCredentialType(policy.credentialType),
-          rewardAmount: policy.rewardAmount.toString(),
-          enabled: policy.enabled,
-          createdAt: new Date(Number(policy.createdAt) * 1000).toISOString(),
-        };
-      }),
-    );
+    const policies = await Promise.all([...this.knownIds].map((id) => this.readPolicy(id)));
 
     return policies.sort((a, b) => Number(b.id) - Number(a.id));
+  }
+
+  /**
+   * Fast path for a policy the caller just created and already knows the id of (e.g.
+   * from decoding its own `PolicyCreated` receipt) — reads it directly instead of
+   * waiting for `scanNewPolicyCreatedLogs()`'s incremental backfill to reach the block
+   * it was created in, which can lag far behind the chain tip under RPC rate limiting.
+   */
+  async registerKnownPolicy(id: bigint): Promise<PolicySummary> {
+    const policy = await this.readPolicy(id);
+    this.knownIds.add(id);
+    return policy;
+  }
+
+  private async readPolicy(id: bigint): Promise<PolicySummary> {
+    const policy = await withRpcRetries(() =>
+      this.client.readContract({
+        address: this.config.rewardPolicyAddress,
+        abi: rewardPolicyAbi,
+        functionName: 'getPolicy',
+        args: [id],
+      }),
+    );
+    return {
+      id: policy.id.toString(),
+      credentialType: decodeCredentialType(policy.credentialType),
+      rewardAmount: policy.rewardAmount.toString(),
+      enabled: policy.enabled,
+      createdAt: new Date(Number(policy.createdAt) * 1000).toISOString(),
+    };
   }
 
   /** Snapshot of scan progress worth persisting across restarts — see `snapshotStore.ts`. */

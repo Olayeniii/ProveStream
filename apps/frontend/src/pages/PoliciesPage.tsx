@@ -1,7 +1,7 @@
 import { encodeCredentialType, rewardPolicyAbi } from '@provenance-streams/protocol';
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
-import { parseUnits } from 'viem';
+import { parseEventLogs, parseUnits } from 'viem';
 import styled from 'styled-components';
 
 import { AppShell } from '../components/AppShell.js';
@@ -41,9 +41,23 @@ export function PoliciesPage({ env, api }: { env: AppEnv; api: ApiClient }) {
         chain: walletClient.chain,
         account: walletClient.account!,
       });
-      await publicClient.waitForTransactionReceipt({ hash });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
       setCredentialType('');
       setRewardAmount('');
+
+      // The backend's policy list is backfilled from `PolicyCreated` history via an
+      // incremental chain scan that can lag far behind the tip under RPC rate
+      // limiting — register the id we just minted directly so it shows up now
+      // instead of whenever that scan eventually catches up.
+      const [created] = parseEventLogs({
+        abi: rewardPolicyAbi,
+        eventName: 'PolicyCreated',
+        logs: receipt.logs,
+      });
+      if (created) {
+        await api.registerKnownPolicy(created.args.id.toString()).catch(() => undefined);
+      }
+
       setRefreshCount((count) => count + 1);
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : 'Failed to create policy.');

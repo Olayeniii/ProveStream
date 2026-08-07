@@ -71,6 +71,21 @@ export function createServer(deps: ServerDependencies): Express {
       .catch(next);
   });
 
+  app.post('/api/policies/:id/register', (req, res, next) => {
+    let id: bigint;
+    try {
+      id = BigInt(req.params.id);
+    } catch {
+      res.status(400).json({ error: 'id must be a numeric policy id' });
+      return;
+    }
+
+    deps.policyService
+      .registerKnownPolicy(id)
+      .then((policy) => res.json(policy))
+      .catch(next);
+  });
+
   app.get('/api/attestations', (_req, res) => {
     res.json(deps.store.listAttestations());
   });

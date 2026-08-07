@@ -72,6 +72,16 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
   const [destinationAddress, setDestinationAddress] = useState('');
   const [destinationError, setDestinationError] = useState<string | undefined>(undefined);
   const [savingDestination, setSavingDestination] = useState(false);
+  const [editingDestination, setEditingDestination] = useState(false);
+
+  const handleEditDestination = () => {
+    if (destinationWallet) {
+      setDestinationChain(destinationWallet.chain);
+      setDestinationAddress(destinationWallet.address);
+    }
+    setDestinationError(undefined);
+    setEditingDestination(true);
+  };
 
   const handleRegisterDestination = () => {
     if (!wallet.walletAddress) {
@@ -89,7 +99,10 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
         chain: destinationChain,
         address: destinationAddress,
       })
-      .then(setDestinationWallet)
+      .then((record) => {
+        setDestinationWallet(record);
+        setEditingDestination(false);
+      })
       .catch((error: unknown) =>
         setDestinationError(error instanceof Error ? error.message : 'Failed to register wallet.'),
       )
@@ -161,7 +174,7 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
             Register a wallet on another chain to receive rewards there instead of on Arc — the
             agent bridges canonical USDC to it via Circle CCTP.
           </HelperText>
-          {destinationWallet ? (
+          {destinationWallet && !editingDestination ? (
             <StatRow>
               <Stat>
                 <StatLabel>Chain</StatLabel>
@@ -171,6 +184,7 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
                 <StatLabel>Address</StatLabel>
                 <StatValue as="code">{destinationWallet.address}</StatValue>
               </Stat>
+              <EditButton onClick={handleEditDestination}>Edit</EditButton>
             </StatRow>
           ) : (
             <FormRow>
@@ -190,8 +204,20 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
                 onChange={(event) => setDestinationAddress(event.target.value)}
               />
               <Button onClick={handleRegisterDestination} disabled={savingDestination}>
-                {savingDestination ? 'Registering…' : 'Register'}
+                {savingDestination ? 'Saving…' : destinationWallet ? 'Save' : 'Register'}
               </Button>
+              {destinationWallet && (
+                <EditButton
+                  type="button"
+                  onClick={() => {
+                    setEditingDestination(false);
+                    setDestinationError(undefined);
+                  }}
+                  disabled={savingDestination}
+                >
+                  Cancel
+                </EditButton>
+              )}
             </FormRow>
           )}
           {destinationError && <ErrorText>{destinationError}</ErrorText>}
@@ -329,4 +355,20 @@ const ErrorText = styled.p`
   margin: 0;
   color: ${(props) => props.theme.colors.error};
   font-size: 0.85rem;
+`;
+
+const EditButton = styled.button`
+  padding: 10px 20px;
+  border-radius: ${(props) => props.theme.radius.pill};
+  border: 1px solid ${(props) => props.theme.colors.border};
+  background: transparent;
+  color: ${(props) => props.theme.colors.text};
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 `;

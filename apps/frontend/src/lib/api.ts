@@ -78,6 +78,8 @@ export function createApiClient(baseUrl: string) {
     getHealth: () => request<{ status: string }>(baseUrl, '/api/health'),
     getTreasuryBalance: () => request<TreasuryBalance>(baseUrl, '/api/treasury'),
     listPolicies: () => request<PolicySummary[]>(baseUrl, '/api/policies'),
+    registerKnownPolicy: (id: string) =>
+      request<PolicySummary>(baseUrl, `/api/policies/${id}/register`, { method: 'POST' }),
     listAttestations: () => request<AttestationRecord[]>(baseUrl, '/api/attestations'),
     listPayments: () => request<Payment[]>(baseUrl, '/api/payments'),
     listRiskAnalyses: () => request<RiskAnalysis[]>(baseUrl, '/api/risk-analyses'),
