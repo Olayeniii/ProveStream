@@ -1,10 +1,13 @@
 import { Cpu } from 'lucide-react';
-import styled from 'styled-components';
+import styled, { useTheme } from 'styled-components';
 
 import type { Stream, StreamTone } from '../../lib/streams.js';
 import { getToneColor } from '../../lib/tone.js';
 
 type RiskTone = Extract<StreamTone, 'positive' | 'warning' | 'attention'>;
+
+const GAUGE_R = 40;
+const GAUGE_CIRC = 2 * Math.PI * GAUGE_R;
 
 /** High risk is coral/`attention` — needs review, same design-language rule as elsewhere: not a hard failure, since a flagged payout can still be approved. */
 function riskLabel(score: number): { label: string; tone: RiskTone } {
@@ -62,27 +65,64 @@ function Complete({
   confidence: number | undefined;
   summary: string | undefined;
 }) {
+  const theme = useTheme();
   const risk = riskLabel(score);
+  const ringColor =
+    risk.tone === 'positive'
+      ? theme.colors.mint
+      : risk.tone === 'warning'
+        ? theme.colors.gold
+        : theme.colors.coral;
 
   return (
     <>
       <GaugeRow>
-        <Gauge $percent={score} $tone={risk.tone}>
-          <GaugeValue>{score}%</GaugeValue>
-        </Gauge>
+        {/* Same round-linecap ring arc as StreamOrb, for one consistent gauge
+            language across the app instead of a second conic-gradient trick. */}
+        <svg viewBox="0 0 100 100" width="112" height="112">
+          <circle
+            cx={50}
+            cy={50}
+            r={GAUGE_R}
+            fill="none"
+            stroke={theme.colors.surfaceMuted}
+            strokeWidth={8}
+          />
+          <circle
+            cx={50}
+            cy={50}
+            r={GAUGE_R}
+            fill="none"
+            stroke={ringColor}
+            strokeWidth={8}
+            strokeLinecap="round"
+            strokeDasharray={GAUGE_CIRC}
+            strokeDashoffset={GAUGE_CIRC * (1 - score / 100)}
+            transform="rotate(-90 50 50)"
+            style={{ transition: 'stroke-dashoffset 600ms ease' }}
+          />
+          <text
+            x={50}
+            y={46}
+            textAnchor="middle"
+            fontSize={20}
+            fontWeight={700}
+            fill={theme.colors.text}
+          >
+            {score}
+          </text>
+          <text x={50} y={62} textAnchor="middle" fontSize={9} fill={theme.colors.textMuted}>
+            / 100
+          </text>
+        </svg>
         <GaugeCaption $tone={risk.tone}>{risk.label}</GaugeCaption>
       </GaugeRow>
       {summary && <Summary>{summary}</Summary>}
       {confidence !== undefined && (
-        <ConfidenceBlock>
-          <ConfidenceRow>
-            <span>Confidence Score</span>
-            <strong>{confidence}%</strong>
-          </ConfidenceRow>
-          <BarTrack>
-            <BarFill $percent={confidence} />
-          </BarTrack>
-        </ConfidenceBlock>
+        <ConfidenceRow>
+          <span>Model confidence</span>
+          <strong>{confidence}%</strong>
+        </ConfidenceRow>
       )}
     </>
   );
@@ -140,43 +180,6 @@ const GaugeRow = styled.div`
   gap: 6px;
 `;
 
-const Gauge = styled.div<{ $percent: number; $tone: RiskTone }>`
-  width: 108px;
-  height: 108px;
-  border-radius: 999px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: conic-gradient(
-    ${(props) =>
-      props.$tone === 'positive'
-        ? props.theme.colors.mint
-        : props.$tone === 'warning'
-          ? props.theme.colors.gold
-          : props.theme.colors.coral}
-      ${(props) => props.$percent * 3.6}deg,
-    ${(props) => props.theme.colors.surfaceMuted} 0deg
-  );
-
-  &::before {
-    content: '';
-    position: absolute;
-  }
-`;
-
-const GaugeValue = styled.span`
-  width: 84px;
-  height: 84px;
-  border-radius: 999px;
-  background: ${(props) => props.theme.colors.surface};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.3rem;
-  font-weight: 700;
-  color: ${(props) => props.theme.colors.text};
-`;
-
 const GaugeCaption = styled.span<{ $tone: RiskTone }>`
   font-size: 0.85rem;
   font-weight: 600;
@@ -190,12 +193,6 @@ const Summary = styled.p`
   text-align: center;
 `;
 
-const ConfidenceBlock = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-`;
-
 const ConfidenceRow = styled.div`
   display: flex;
   align-items: center;
@@ -206,18 +203,4 @@ const ConfidenceRow = styled.div`
   strong {
     color: ${(props) => props.theme.colors.text};
   }
-`;
-
-const BarTrack = styled.div`
-  width: 100%;
-  height: 6px;
-  border-radius: 999px;
-  background: ${(props) => props.theme.colors.surfaceMuted};
-  overflow: hidden;
-`;
-
-const BarFill = styled.div<{ $percent: number }>`
-  width: ${(props) => props.$percent}%;
-  height: 100%;
-  background: ${(props) => props.theme.colors.primary};
 `;

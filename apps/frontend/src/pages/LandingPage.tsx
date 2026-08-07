@@ -81,6 +81,7 @@ export function LandingPage({ env, api }: { env: AppEnv; api: ApiClient }) {
       </NavBar>
 
       <Hero>
+        <HeroGlow />
         <StreamOrb
           size={120}
           verification={attestations.length > 0 ? 100 : 0}
@@ -193,6 +194,7 @@ const LaunchButtonSmall = styled.a`
 `;
 
 const Hero = styled.div`
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -201,6 +203,26 @@ const Hero = styled.div`
   gap: 24px;
   text-align: center;
   padding: 64px 24px;
+`;
+
+// Ambient light from the Orb itself, not decorative filler — the hero reads
+// stark without it once the source is the only visual besides text.
+const HeroGlow = styled.div`
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 560px;
+  height: 560px;
+  max-width: 90vw;
+  border-radius: 999px;
+  background: radial-gradient(
+    circle,
+    ${(props) => props.theme.streamKit.reward}14 0%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: -1;
 `;
 
 const Headline = styled.h1`

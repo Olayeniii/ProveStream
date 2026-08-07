@@ -186,6 +186,18 @@ const Sidebar = styled.aside`
   border-right: 1px solid ${(props) => props.theme.colors.border};
   background: ${(props) => props.theme.colors.surface};
 
+  /*
+   * Without this, Sidebar is a plain flex item that stretches to match
+   * Content's full height (flex default align-items: stretch) — so a long
+   * page (a long list, or a raw error dump before it was cleaned up) drags
+   * the sidebar's background/border down the entire page instead of it
+   * staying pinned to the viewport while Content scrolls underneath it.
+   */
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+
   @media (max-width: 900px) {
     display: none;
   }
