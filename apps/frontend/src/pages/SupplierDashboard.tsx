@@ -1,5 +1,6 @@
 import type {
   DestinationWallet,
+  EvidenceSubmission,
   Payment,
   RiskAnalysis,
   SignatureVerification,
@@ -18,7 +19,16 @@ import type { AppEnv } from '../env.js';
 import { useEmbeddedWallet } from '../hooks/useEmbeddedWallet.js';
 import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
 import { getPublicClient } from '../lib/clients.js';
+import { formatRelativeTime } from '../lib/format.js';
 import { buildStreams } from '../lib/streams.js';
+import type { StreamTone } from '../lib/streams.js';
+import { getToneColor } from '../lib/tone.js';
+
+const EVIDENCE_STATUS_TONE: Record<EvidenceSubmission['status'], StreamTone> = {
+  pending: 'warning',
+  attested: 'positive',
+  rejected: 'negative',
+};
 
 export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
   const wallet = useEmbeddedWallet('supplier', api);
@@ -31,6 +41,14 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
   const [destinationWallet, setDestinationWallet] = useState<DestinationWallet | undefined>(
     undefined,
   );
+  const [evidenceSubmissions, setEvidenceSubmissions] = useState<EvidenceSubmission[]>([]);
+
+  const refreshEvidenceSubmissions = () => {
+    api
+      .listEvidenceSubmissions()
+      .then(setEvidenceSubmissions)
+      .catch(() => undefined);
+  };
 
   useEffect(() => {
     if (wallet.status !== 'ready' || !wallet.walletAddress) {
@@ -67,7 +85,56 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
       .getDestinationWallet(wallet.walletAddress)
       .then(setDestinationWallet)
       .catch(() => undefined);
+    refreshEvidenceSubmissions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, env, wallet.status, wallet.walletAddress]);
+
+  const mySubmissions = useMemo(
+    () =>
+      wallet.walletAddress
+        ? evidenceSubmissions.filter(
+            (submission) => submission.supplier.toLowerCase() === wallet.walletAddress?.toLowerCase(),
+          )
+        : [],
+    [evidenceSubmissions, wallet.walletAddress],
+  );
+
+  const [evidencePolicyId, setEvidencePolicyId] = useState('');
+  const [evidenceText, setEvidenceText] = useState('');
+  const [evidenceError, setEvidenceError] = useState<string | undefined>(undefined);
+  const [submittingEvidence, setSubmittingEvidence] = useState(false);
+
+  const handleSubmitEvidence = () => {
+    if (!wallet.walletAddress) {
+      return;
+    }
+    const policyIdNumber = Number(evidencePolicyId);
+    if (!evidencePolicyId.trim() || !Number.isInteger(policyIdNumber) || policyIdNumber < 0) {
+      setEvidenceError('Enter a non-negative whole number for the policy ID.');
+      return;
+    }
+    if (!evidenceText.trim()) {
+      setEvidenceError('Enter the evidence text for an auditor to review.');
+      return;
+    }
+    setEvidenceError(undefined);
+    setSubmittingEvidence(true);
+    api
+      .createEvidenceSubmission({
+        supplier: wallet.walletAddress,
+        policyId: evidencePolicyId,
+        evidenceText,
+      })
+      .then(() => {
+        setEvidenceText('');
+        setEvidencePolicyId('');
+        refreshEvidenceSubmissions();
+      })
+      .catch((error: unknown) =>
+        setEvidenceError(error instanceof Error ? error.message : 'Failed to submit evidence.'),
+      )
+      .finally(() => setSubmittingEvidence(false));
+  };
 
   const [destinationChain, setDestinationChain] = useState<string>(SUPPORTED_DESTINATION_CHAINS[0]);
   const [destinationAddress, setDestinationAddress] = useState('');
@@ -222,6 +289,51 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
             </FormRow>
           )}
           {destinationError && <ErrorText>{destinationError}</ErrorText>}
+        </Card>
+      )}
+
+      {wallet.status === 'ready' && (
+        <Card>
+          <SectionTitle>Submit evidence</SectionTitle>
+          <HelperText>
+            Send evidence to an auditor ahead of time — it lands in their queue with a real proof
+            hash already computed, so they attest to what you actually submitted instead of typing
+            it in from scratch.
+          </HelperText>
+          <FormRow>
+            <Input
+              placeholder="Policy ID"
+              value={evidencePolicyId}
+              onChange={(event) => setEvidencePolicyId(event.target.value)}
+              style={{ flex: '0 0 140px', minWidth: '100px' }}
+            />
+            <Input
+              placeholder="Evidence text for the auditor to review"
+              value={evidenceText}
+              onChange={(event) => setEvidenceText(event.target.value)}
+            />
+            <Button onClick={handleSubmitEvidence} disabled={submittingEvidence}>
+              {submittingEvidence ? 'Submitting…' : 'Submit'}
+            </Button>
+          </FormRow>
+          {evidenceError && <ErrorText>{evidenceError}</ErrorText>}
+          {mySubmissions.length > 0 && (
+            <List>
+              {mySubmissions.map((submission) => (
+                <ListItem key={submission.id}>
+                  <ListItemBody>
+                    <span>{submission.evidenceText}</span>
+                    <ListItemMeta>
+                      Policy #{submission.policyId} · {formatRelativeTime(submission.createdAt)}
+                    </ListItemMeta>
+                  </ListItemBody>
+                  <StatusPill $tone={EVIDENCE_STATUS_TONE[submission.status]}>
+                    {submission.status}
+                  </StatusPill>
+                </ListItem>
+              ))}
+            </List>
+          )}
         </Card>
       )}
 

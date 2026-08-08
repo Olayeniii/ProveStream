@@ -1,6 +1,7 @@
 import type {
   AgentHealth,
   DestinationWallet,
+  EvidenceSubmission,
   FraudAlert,
   Payment,
   RiskAnalysis,
@@ -103,10 +104,23 @@ export function createApiClient(baseUrl: string) {
     listSettlementQueue: () => request<SettlementJobRecord[]>(baseUrl, '/api/settlement-queue'),
     getAgentHealth: () => request<AgentHealth>(baseUrl, '/api/agent-health'),
 
-    submitEvidence: (input: { proofHash: string; evidenceText: string }) =>
-      request<{ ok: true }>(baseUrl, '/api/evidence', {
+    createEvidenceSubmission: (input: {
+      supplier: string;
+      policyId: string;
+      evidenceText: string;
+    }) =>
+      request<EvidenceSubmission>(baseUrl, '/api/evidence-submissions', {
         method: 'POST',
         body: JSON.stringify(input),
+      }),
+    listEvidenceSubmissions: (status?: EvidenceSubmission['status']) =>
+      request<EvidenceSubmission[]>(
+        baseUrl,
+        status ? `/api/evidence-submissions?status=${status}` : '/api/evidence-submissions',
+      ),
+    rejectEvidenceSubmission: (proofHash: string) =>
+      request<{ ok: true }>(baseUrl, `/api/evidence-submissions/${proofHash}/reject`, {
+        method: 'POST',
       }),
 
     createWalletSession: (userId: string) =>

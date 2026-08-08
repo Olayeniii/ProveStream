@@ -37,8 +37,9 @@ const transferChallengeBodySchema = z.object({
   amount: z.string().min(1),
 });
 const waitForTxHashBodySchema = z.object({ userToken: z.string().min(1) });
-const evidenceBodySchema = z.object({
-  proofHash: z.string().refine(isHex),
+const evidenceSubmissionBodySchema = z.object({
+  supplier: z.string().refine(isAddress),
+  policyId: z.string().min(1),
   evidenceText: z.string().min(1),
 });
 const destinationWalletBodySchema = z.object({
@@ -94,14 +95,51 @@ export function createServer(deps: ServerDependencies): Express {
     res.json(deps.store.listPayments());
   });
 
-  app.post('/api/evidence', (req, res) => {
-    const body = evidenceBodySchema.safeParse(req.body);
+  app.post('/api/evidence-submissions', (req, res) => {
+    const body = evidenceSubmissionBodySchema.safeParse(req.body);
     if (!body.success) {
-      res.status(400).json({ error: 'proofHash and evidenceText are required' });
+      res.status(400).json({ error: 'supplier, policyId, and evidenceText are required' });
       return;
     }
 
-    deps.store.addPendingEvidence(body.data.proofHash, body.data.evidenceText);
+    const record = deps.store.createEvidenceSubmission({
+      supplier: body.data.supplier,
+      policyId: body.data.policyId,
+      evidenceText: body.data.evidenceText,
+    });
+    res.json(record);
+  });
+
+  app.get('/api/evidence-submissions', (req, res) => {
+    const status = req.query.status;
+    if (
+      status !== undefined &&
+      status !== 'pending' &&
+      status !== 'attested' &&
+      status !== 'rejected'
+    ) {
+      res.status(400).json({ error: 'status must be pending, attested, or rejected' });
+      return;
+    }
+    res.json(deps.store.listEvidenceSubmissions(status));
+  });
+
+  app.post('/api/evidence-submissions/:proofHash/reject', (req, res) => {
+    if (!isHex(req.params.proofHash)) {
+      res.status(400).json({ error: 'proofHash must be a hex string.' });
+      return;
+    }
+    const submission = deps.store.getEvidenceSubmission(req.params.proofHash);
+    if (!submission) {
+      res.status(404).json({ error: 'No evidence submission found for this proof hash.' });
+      return;
+    }
+    if (submission.status !== 'pending') {
+      res.status(409).json({ error: `Evidence submission is already ${submission.status}.` });
+      return;
+    }
+
+    deps.store.markEvidenceRejected(req.params.proofHash);
     res.json({ ok: true });
   });
 

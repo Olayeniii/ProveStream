@@ -243,14 +243,32 @@ async function main(): Promise<void> {
 
       verifyAttestationSignature(attestationId, context.transactionHash, auditor);
 
+      // Always resolve the proof hash and mark any matching evidence
+      // submission attested, independent of whether risk analysis is
+      // configured — those are two different consumers of the same lookup.
+      const attestationIdValue = attestation.id;
+      const proofHashPromise = attestationReader
+        .getProofHash(attestationIdValue)
+        .catch((error: unknown) => {
+          console.error('Failed to read proof hash for attestation:', error);
+          return undefined;
+        });
+
       if (!riskAnalysisService) {
+        void proofHashPromise.then((proofHash) => {
+          if (proofHash) {
+            store.markEvidenceAttested(proofHash, attestationId);
+          }
+        });
         return;
       }
-      const attestationIdValue = attestation.id;
-      const riskAnalysisPromise: Promise<RiskAnalysisResult | undefined> = attestationReader
-        .getProofHash(attestationIdValue)
-        .then((proofHash) => {
-          const evidenceText = store.takePendingEvidence(proofHash);
+      const riskAnalysisPromise: Promise<RiskAnalysisResult | undefined> = proofHashPromise.then(
+        (proofHash) => {
+          if (!proofHash) {
+            return undefined;
+          }
+          store.markEvidenceAttested(proofHash, attestationId);
+          const evidenceText = store.getEvidenceSubmission(proofHash)?.evidenceText;
           if (!evidenceText) {
             return undefined;
           }
@@ -272,11 +290,8 @@ async function main(): Promise<void> {
               });
               return undefined;
             });
-        })
-        .catch((error: unknown) => {
-          console.error('Failed to read attestation for risk analysis:', error);
-          return undefined;
-        });
+        },
+      );
       riskAnalysisPromises.set(attestationId, riskAnalysisPromise);
     },
     onRewardEligible: (reward, context) => {

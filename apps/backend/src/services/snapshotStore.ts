@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import type {
   DestinationWallet,
+  EvidenceSubmission,
   FraudAlert,
   Payment,
   SettlementJobRecord,
@@ -29,6 +30,7 @@ export interface Snapshot {
   fraudAlerts: FraudAlert[];
   settlementJobs: SettlementJobRecord[];
   destinationWallets: DestinationWallet[];
+  evidenceSubmissions: EvidenceSubmission[];
   knownPolicyIds: string[];
   scannedThroughBlock: {
     attestationRegistry?: string;

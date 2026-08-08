@@ -1,6 +1,7 @@
 import type {
   AgentHealth,
   DestinationWallet,
+  EvidenceSubmission,
   FraudAlert,
   FraudAlertStatus,
   Payment,
@@ -13,6 +14,7 @@ import type {
   SignatureVerificationStatus,
 } from '@provenance-streams/protocol';
 import type { Address, Hex } from 'viem';
+import { keccak256, toHex } from 'viem';
 
 export interface AttestationRecord {
   id: string;
@@ -37,7 +39,8 @@ export class Store {
   private readonly attestations: AttestationRecord[] = [];
   private readonly attestationIds = new Set<string>();
   private readonly payments = new Map<string, Payment>();
-  private readonly pendingEvidence = new Map<Hex, string>();
+  private readonly evidenceSubmissions = new Map<Hex, EvidenceSubmission>();
+  private evidenceSubmissionSeq = 0;
   private readonly riskAnalyses = new Map<string, RiskAnalysis>();
   private readonly signatureVerifications = new Map<string, SignatureVerification>();
   private readonly destinationWallets = new Map<Address, DestinationWallet>();
@@ -125,16 +128,65 @@ export class Store {
     return [...this.payments.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
-  /** Stores an attestation's plaintext evidence, keyed by the hash the frontend already computed. */
-  addPendingEvidence(proofHash: Hex, evidenceText: string): void {
-    this.pendingEvidence.set(proofHash, evidenceText);
+  /**
+   * Records a supplier's submitted evidence, hashing it the same way
+   * `AttestationRegistry` expects (`keccak256(toHex(evidenceText))`) so an
+   * auditor's later "Attest" action can reuse this exact `proofHash` instead
+   * of re-hashing. Duplicate proof hashes are already rejected on-chain, so
+   * this can't collide across two genuinely different submissions — a retry
+   * of the same text just overwrites its own still-pending record.
+   */
+  createEvidenceSubmission(input: {
+    supplier: Address;
+    policyId: string;
+    evidenceText: string;
+  }): EvidenceSubmission {
+    const proofHash = keccak256(toHex(input.evidenceText));
+    const now = new Date().toISOString();
+    this.evidenceSubmissionSeq += 1;
+    const record: EvidenceSubmission = {
+      id: this.evidenceSubmissionSeq.toString(),
+      supplier: input.supplier,
+      policyId: input.policyId,
+      proofHash,
+      evidenceText: input.evidenceText,
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.evidenceSubmissions.set(proofHash, record);
+    return record;
   }
 
-  /** Consumes (removes) the evidence text stored for `proofHash`, if any was submitted. */
-  takePendingEvidence(proofHash: Hex): string | undefined {
-    const evidenceText = this.pendingEvidence.get(proofHash);
-    this.pendingEvidence.delete(proofHash);
-    return evidenceText;
+  /** Non-destructive — a submission stays queryable after an auditor attests to it. */
+  getEvidenceSubmission(proofHash: Hex): EvidenceSubmission | undefined {
+    return this.evidenceSubmissions.get(proofHash);
+  }
+
+  listEvidenceSubmissions(status?: EvidenceSubmission['status']): EvidenceSubmission[] {
+    const all = [...this.evidenceSubmissions.values()].sort((a, b) =>
+      b.createdAt.localeCompare(a.createdAt),
+    );
+    return status ? all.filter((entry) => entry.status === status) : all;
+  }
+
+  markEvidenceAttested(proofHash: Hex, attestationId: string): void {
+    const record = this.evidenceSubmissions.get(proofHash);
+    if (!record || record.status !== 'pending') {
+      return;
+    }
+    record.status = 'attested';
+    record.attestationId = attestationId;
+    record.updatedAt = new Date().toISOString();
+  }
+
+  markEvidenceRejected(proofHash: Hex): void {
+    const record = this.evidenceSubmissions.get(proofHash);
+    if (!record || record.status !== 'pending') {
+      return;
+    }
+    record.status = 'rejected';
+    record.updatedAt = new Date().toISOString();
   }
 
   createPendingRiskAnalysis(attestationId: string): void {
@@ -316,6 +368,7 @@ export class Store {
     fraudAlerts: FraudAlert[];
     settlementJobs: SettlementJobRecord[];
     destinationWallets: DestinationWallet[];
+    evidenceSubmissions: EvidenceSubmission[];
   } {
     return {
       attestations: this.attestations,
@@ -323,6 +376,7 @@ export class Store {
       fraudAlerts: [...this.fraudAlerts.values()],
       settlementJobs: [...this.settlementJobs.values()],
       destinationWallets: [...this.destinationWallets.values()],
+      evidenceSubmissions: [...this.evidenceSubmissions.values()],
     };
   }
 
@@ -333,6 +387,7 @@ export class Store {
     fraudAlerts: FraudAlert[];
     settlementJobs: SettlementJobRecord[];
     destinationWallets: DestinationWallet[];
+    evidenceSubmissions?: EvidenceSubmission[];
   }): void {
     for (const attestation of [...data.attestations].reverse()) {
       this.addAttestation(attestation);
@@ -348,6 +403,10 @@ export class Store {
     }
     for (const wallet of data.destinationWallets) {
       this.destinationWallets.set(wallet.supplier, wallet);
+    }
+    for (const submission of data.evidenceSubmissions ?? []) {
+      this.evidenceSubmissions.set(submission.proofHash, submission);
+      this.evidenceSubmissionSeq = Math.max(this.evidenceSubmissionSeq, Number(submission.id) || 0);
     }
   }
 }
