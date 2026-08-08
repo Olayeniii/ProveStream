@@ -148,24 +148,39 @@ const NavBar = styled.nav`
   gap: 24px;
   padding: 16px 32px;
   border-bottom: 1px solid ${(props) => props.theme.colors.border};
+
+  @media (max-width: 480px) {
+    gap: 12px;
+    padding: 14px 16px;
+  }
 `;
 
 const Brand = styled.div`
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 `;
 
 const BrandLogo = styled.img`
   width: 28px;
   height: 28px;
   border-radius: 8px;
+
+  @media (max-width: 480px) {
+    width: 22px;
+    height: 22px;
+  }
 `;
 
 const BrandText = styled.span`
   font-weight: 700;
   font-size: 1rem;
   color: ${(props) => props.theme.colors.text};
+
+  @media (max-width: 480px) {
+    font-size: 0.85rem;
+  }
 `;
 
 const Accent = styled.span`
@@ -176,15 +191,24 @@ const NavLinks = styled.div`
   display: flex;
   gap: 20px;
   flex: 1;
+
+  @media (max-width: 480px) {
+    gap: 10px;
+  }
 `;
 
 const NavAnchorLink = styled(Link)`
   font-size: 0.88rem;
   color: ${(props) => props.theme.colors.textMuted};
   text-decoration: none;
+  white-space: nowrap;
 
   &:hover {
     color: ${(props) => props.theme.colors.text};
+  }
+
+  @media (max-width: 480px) {
+    font-size: 0.78rem;
   }
 `;
 
@@ -196,7 +220,14 @@ const LaunchButtonSmall = styled.a`
   font-size: 0.85rem;
   font-weight: 600;
   text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: transform 160ms ease-out;
+
+  @media (max-width: 480px) {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
 
   &:active {
     transform: scale(0.97);
@@ -306,10 +337,16 @@ const PrimaryCta = styled.a`
   font-size: 0.95rem;
   font-weight: 700;
   text-decoration: none;
+  white-space: nowrap;
   transition: transform 160ms ease-out;
 
   &:active {
     transform: scale(0.97);
+  }
+
+  @media (max-width: 480px) {
+    padding: 12px 18px;
+    font-size: 0.88rem;
   }
 `;
 
@@ -325,10 +362,16 @@ const SecondaryCta = styled(Link)`
   font-size: 0.95rem;
   font-weight: 600;
   text-decoration: none;
+  white-space: nowrap;
   transition: transform 160ms ease-out;
 
   &:active {
     transform: scale(0.97);
+  }
+
+  @media (max-width: 480px) {
+    padding: 12px 18px;
+    font-size: 0.88rem;
   }
 `;
 

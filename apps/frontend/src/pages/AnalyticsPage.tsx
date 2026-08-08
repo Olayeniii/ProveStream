@@ -127,42 +127,45 @@ export function AnalyticsPage({ env, api }: { env: AppEnv; api: ApiClient }) {
       env={env}
       api={api}
     >
-      <StatGrid>
-        <StatCard>
-          <StatLabel>Total Streams</StatLabel>
-          <StatValue>{streams.length}</StatValue>
-        </StatCard>
-        <StatCard>
-          <StatLabel>Total Rewards Paid</StatLabel>
-          <StatValue>
-            <UsdcIcon /> {totalRewardsPaid} USDC
-          </StatValue>
-        </StatCard>
-        <StatCard>
-          <StatLabel>Avg. Attestation → Paid</StatLabel>
-          <StatValue>
-            {averageSettlementSeconds !== undefined
-              ? formatDuration(averageSettlementSeconds)
-              : '—'}
-          </StatValue>
-        </StatCard>
-        <StatCard>
-          <StatLabel>Successful Settlements</StatLabel>
-          <StatValue>{successfulSettlements}</StatValue>
-        </StatCard>
-        <StatCard>
-          <StatLabel>Failed Settlements</StatLabel>
-          <StatValue>{failedSettlements}</StatValue>
-        </StatCard>
-        <StatCard>
-          <StatLabel>Active Suppliers</StatLabel>
-          <StatValue>{activeSuppliers}</StatValue>
-        </StatCard>
-        <StatCard>
-          <StatLabel>Active Auditors</StatLabel>
-          <StatValue>{activeAuditors}</StatValue>
-        </StatCard>
-      </StatGrid>
+      <Card>
+        <SectionTitle>Overview</SectionTitle>
+        <StatRow>
+          <Stat>
+            <StatLabel>Total Streams</StatLabel>
+            <StatValue>{streams.length}</StatValue>
+          </Stat>
+          <Stat>
+            <StatLabel>Total Rewards Paid</StatLabel>
+            <StatValue>
+              <UsdcIcon /> {totalRewardsPaid} USDC
+            </StatValue>
+          </Stat>
+          <Stat>
+            <StatLabel>Avg. Attestation → Paid</StatLabel>
+            <StatValue>
+              {averageSettlementSeconds !== undefined
+                ? formatDuration(averageSettlementSeconds)
+                : '—'}
+            </StatValue>
+          </Stat>
+          <Stat>
+            <StatLabel>Successful Settlements</StatLabel>
+            <StatValue>{successfulSettlements}</StatValue>
+          </Stat>
+          <Stat>
+            <StatLabel>Failed Settlements</StatLabel>
+            <StatValue>{failedSettlements}</StatValue>
+          </Stat>
+          <Stat>
+            <StatLabel>Active Suppliers</StatLabel>
+            <StatValue>{activeSuppliers}</StatValue>
+          </Stat>
+          <Stat>
+            <StatLabel>Active Auditors</StatLabel>
+            <StatValue>{activeAuditors}</StatValue>
+          </Stat>
+        </StatRow>
+      </Card>
 
       <Card>
         <SectionTitle>Streams by status</SectionTitle>
@@ -183,17 +186,13 @@ export function AnalyticsPage({ env, api }: { env: AppEnv; api: ApiClient }) {
   );
 }
 
-const StatGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
+const StatRow = styled.div`
+  display: flex;
+  gap: 32px;
+  flex-wrap: wrap;
 `;
 
-const StatCard = styled.div`
-  background: ${(props) => props.theme.colors.surface};
-  border: 1px solid ${(props) => props.theme.colors.border};
-  border-radius: ${(props) => props.theme.radius.card};
-  padding: 20px;
+const Stat = styled.div`
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -207,7 +206,10 @@ const StatLabel = styled.span`
 `;
 
 const StatValue = styled.span`
-  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 1.25rem;
   font-weight: 700;
   color: ${(props) => props.theme.colors.text};
 `;
