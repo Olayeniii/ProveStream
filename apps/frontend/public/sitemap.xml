@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  This app uses react-router's HashRouter, so every in-app route (e.g. /streams,
+  /how-it-works) lives after a "#" in the URL fragment, which crawlers generally
+  don't index as separate pages. Only the root document below is a real,
+  distinct crawlable URL until the app switches to path-based routing.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://test.domain/</loc>
+  </url>
+</urlset>

@@ -1,0 +1,15 @@
+# Provenance Streams
+
+> An autonomous USDC settlement engine on Circle's Arc chain. An auditor attests to a supplier meeting a requirement, AI and on-chain checks review the evidence, and the supplier is paid automatically — no human in the loop for the normal case.
+
+Provenance Streams records auditor-signed attestations on-chain, evaluates them against configurable reward policies, runs independent signature verification and AI-assisted fraud scoring, and settles real USDC payouts (same-chain on Arc, or bridged cross-chain via CCTP) from a treasury wallet — with high-risk payouts held for human review instead of blocked outright.
+
+## Roles
+
+- Auditor: submits attestations on a supplier's behalf.
+- Supplier: receives USDC rewards once an attestation clears policy, signature, and fraud checks.
+- Admin: reviews flagged payouts and monitors settlement/bridge activity.
+
+## Docs
+
+- /how-it-works — plain-language walkthrough of the attest → verify → settle flow.
