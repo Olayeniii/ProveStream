@@ -14,8 +14,14 @@ import type { AppEnv } from '../env.js';
 import { useEmbeddedWallet } from '../hooks/useEmbeddedWallet.js';
 import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
 import { getPublicClient } from '../lib/clients.js';
+import { formatRelativeTime } from '../lib/format.js';
 import { buildStreams } from '../lib/streams.js';
-import type { Payment, RiskAnalysis, SignatureVerification } from '@provenance-streams/protocol';
+import type {
+  EvidenceSubmission,
+  Payment,
+  RiskAnalysis,
+  SignatureVerification,
+} from '@provenance-streams/protocol';
 
 export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
   const wallet = useEmbeddedWallet('auditor', api);
@@ -26,6 +32,16 @@ export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) 
   const [payments, setPayments] = useState<Payment[]>([]);
   const [riskAnalyses, setRiskAnalyses] = useState<RiskAnalysis[]>([]);
   const [signatureVerifications, setSignatureVerifications] = useState<SignatureVerification[]>([]);
+  const [pendingEvidence, setPendingEvidence] = useState<EvidenceSubmission[]>([]);
+  const [attestingId, setAttestingId] = useState<string | undefined>(undefined);
+  const [queueError, setQueueError] = useState<string | undefined>(undefined);
+
+  const refreshPendingEvidence = () => {
+    api
+      .listEvidenceSubmissions('pending')
+      .then(setPendingEvidence)
+      .catch(() => undefined);
+  };
 
   useEffect(() => {
     if (wallet.status !== 'ready') {
@@ -57,13 +73,45 @@ export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) 
       .listSignatureVerifications()
       .then(setSignatureVerifications)
       .catch(() => undefined);
+    refreshPendingEvidence();
   }, [api, env, wallet.status, wallet.walletAddress, status.state]);
+
+  async function handleAttestSubmission(submission: EvidenceSubmission) {
+    setQueueError(undefined);
+    setAttestingId(submission.id);
+    try {
+      await wallet.submitAttestation({
+        supplier: submission.supplier,
+        proofHash: submission.proofHash,
+        policyId: submission.policyId,
+      });
+      refreshPendingEvidence();
+    } catch (error) {
+      setQueueError(error instanceof Error ? error.message : 'Failed to attest this submission.');
+    } finally {
+      setAttestingId(undefined);
+    }
+  }
+
+  async function handleRejectSubmission(submission: EvidenceSubmission) {
+    setQueueError(undefined);
+    try {
+      await api.rejectEvidenceSubmission(submission.proofHash);
+      refreshPendingEvidence();
+    } catch (error) {
+      setQueueError(error instanceof Error ? error.message : 'Failed to reject this submission.');
+    }
+  }
 
   async function handleSubmit(values: AttestationFormValues) {
     setStatus({ state: 'pending' });
     try {
       await api
-        .submitEvidence({ proofHash: values.proofHash, evidenceText: values.evidenceText })
+        .createEvidenceSubmission({
+          supplier: values.supplier,
+          policyId: values.policyId.toString(),
+          evidenceText: values.evidenceText,
+        })
         .catch(() => undefined);
 
       const { txHash } = await wallet.submitAttestation({
@@ -119,6 +167,48 @@ export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) 
         <Card>
           <SectionTitle>Sign in</SectionTitle>
           <EmbeddedWalletLogin wallet={wallet} />
+        </Card>
+      )}
+
+      {wallet.status === 'ready' && (
+        <Card>
+          <SectionTitle>Pending evidence</SectionTitle>
+          {queueError && <QueueErrorText>{queueError}</QueueErrorText>}
+          {pendingEvidence.length === 0 ? (
+            <Empty>No evidence submitted by suppliers yet.</Empty>
+          ) : (
+            <QueueList>
+              {pendingEvidence.map((submission) => (
+                <QueueItem key={submission.id}>
+                  <QueueItemBody>
+                    <span>{submission.evidenceText}</span>
+                    <QueueItemMeta>
+                      Policy #{submission.policyId} · <Address>{submission.supplier}</Address> ·{' '}
+                      {formatRelativeTime(submission.createdAt)}
+                    </QueueItemMeta>
+                  </QueueItemBody>
+                  <QueueActions>
+                    <SmallButton
+                      onClick={() => {
+                        void handleAttestSubmission(submission);
+                      }}
+                      disabled={attestingId === submission.id}
+                    >
+                      {attestingId === submission.id ? 'Attesting…' : 'Attest'}
+                    </SmallButton>
+                    <SmallGhostButton
+                      onClick={() => {
+                        void handleRejectSubmission(submission);
+                      }}
+                      disabled={attestingId === submission.id}
+                    >
+                      Reject
+                    </SmallGhostButton>
+                  </QueueActions>
+                </QueueItem>
+              ))}
+            </QueueList>
+          )}
         </Card>
       )}
 
@@ -185,4 +275,99 @@ const Grid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 16px;
+`;
+
+const Address = styled.code`
+  color: ${(props) => props.theme.colors.text};
+`;
+
+const QueueErrorText = styled.p`
+  margin: 0;
+  color: ${(props) => props.theme.colors.error};
+  font-size: 0.85rem;
+`;
+
+const QueueList = styled.ul`
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+`;
+
+const QueueItem = styled.li`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid ${(props) => props.theme.colors.border};
+
+  &:last-child {
+    border-bottom: none;
+  }
+`;
+
+const QueueItemBody = styled.div`
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.85rem;
+  color: ${(props) => props.theme.colors.text};
+  overflow-wrap: anywhere;
+`;
+
+const QueueItemMeta = styled.span`
+  font-size: 0.75rem;
+  color: ${(props) => props.theme.colors.textMuted};
+`;
+
+const QueueActions = styled.div`
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+`;
+
+const SmallButton = styled.button`
+  padding: 6px 14px;
+  border-radius: ${(props) => props.theme.radius.pill};
+  border: none;
+  background: ${(props) => props.theme.colors.primary};
+  color: ${(props) => props.theme.colors.primaryText};
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 160ms ease-out;
+
+  &:active {
+    transform: scale(0.97);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+`;
+
+const SmallGhostButton = styled.button`
+  padding: 6px 14px;
+  border-radius: ${(props) => props.theme.radius.pill};
+  border: 1px solid ${(props) => props.theme.colors.border};
+  background: transparent;
+  color: ${(props) => props.theme.colors.text};
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 160ms ease-out;
+
+  &:active {
+    transform: scale(0.97);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 `;

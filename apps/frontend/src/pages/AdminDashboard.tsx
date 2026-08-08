@@ -1,5 +1,6 @@
 import type {
   AgentHealth,
+  EvidenceSubmission,
   FraudAlert,
   Payment,
   RiskAnalysis,
@@ -77,6 +78,7 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [riskAnalyses, setRiskAnalyses] = useState<RiskAnalysis[]>([]);
   const [signatureVerifications, setSignatureVerifications] = useState<SignatureVerification[]>([]);
+  const [evidenceSubmissions, setEvidenceSubmissions] = useState<EvidenceSubmission[]>([]);
   const [alertActionError, setAlertActionError] = useState<string | undefined>(undefined);
 
   const refresh = useCallback(() => {
@@ -108,6 +110,10 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
       .listSignatureVerifications()
       .then(setSignatureVerifications)
       .catch(() => undefined);
+    api
+      .listEvidenceSubmissions()
+      .then(setEvidenceSubmissions)
+      .catch(() => undefined);
   }, [api]);
 
   const triggerLog = useMemo(
@@ -119,8 +125,17 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
         signatureVerifications,
         fraudAlerts,
         settlementQueue,
+        evidenceSubmissions,
       ),
-    [attestations, payments, riskAnalyses, signatureVerifications, fraudAlerts, settlementQueue],
+    [
+      attestations,
+      payments,
+      riskAnalyses,
+      signatureVerifications,
+      fraudAlerts,
+      settlementQueue,
+      evidenceSubmissions,
+    ],
   );
 
   useEffect(() => {

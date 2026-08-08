@@ -86,14 +86,14 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
       .then(setDestinationWallet)
       .catch(() => undefined);
     refreshEvidenceSubmissions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, env, wallet.status, wallet.walletAddress]);
 
   const mySubmissions = useMemo(
     () =>
       wallet.walletAddress
         ? evidenceSubmissions.filter(
-            (submission) => submission.supplier.toLowerCase() === wallet.walletAddress?.toLowerCase(),
+            (submission) =>
+              submission.supplier.toLowerCase() === wallet.walletAddress?.toLowerCase(),
           )
         : [],
     [evidenceSubmissions, wallet.walletAddress],
@@ -425,6 +425,54 @@ const FormRow = styled.div`
   gap: 12px;
   flex-wrap: wrap;
   align-items: center;
+`;
+
+const List = styled.ul`
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+`;
+
+const ListItem = styled.li`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid ${(props) => props.theme.colors.border};
+
+  &:last-child {
+    border-bottom: none;
+  }
+`;
+
+const ListItemBody = styled.div`
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.85rem;
+  color: ${(props) => props.theme.colors.text};
+  overflow-wrap: anywhere;
+`;
+
+const ListItemMeta = styled.span`
+  font-size: 0.75rem;
+  color: ${(props) => props.theme.colors.textMuted};
+`;
+
+const StatusPill = styled.span<{ $tone: StreamTone }>`
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: ${(props) => props.theme.radius.pill};
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: ${(props) => getToneColor(props.theme, props.$tone).text};
+  background: ${(props) => getToneColor(props.theme, props.$tone).background};
 `;
 
 const Select = styled.select`

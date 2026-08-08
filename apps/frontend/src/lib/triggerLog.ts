@@ -1,4 +1,5 @@
 import type {
+  EvidenceSubmission,
   FraudAlert,
   Payment,
   RiskAnalysis,
@@ -32,8 +33,26 @@ export function buildTriggerLog(
   signatureVerifications: SignatureVerification[],
   fraudAlerts: FraudAlert[],
   settlementJobs: SettlementJobRecord[],
+  evidenceSubmissions: EvidenceSubmission[] = [],
 ): TriggerLogEntry[] {
   const entries: TriggerLogEntry[] = [];
+
+  for (const submission of evidenceSubmissions) {
+    entries.push({
+      id: `evidence-${submission.id}`,
+      timestamp: submission.createdAt,
+      message: `Evidence submitted by ${submission.supplier} for policy #${submission.policyId}`,
+      tone: 'neutral',
+    });
+    if (submission.status === 'rejected') {
+      entries.push({
+        id: `evidence-rejected-${submission.id}`,
+        timestamp: submission.updatedAt,
+        message: `Evidence from ${submission.supplier} rejected by an auditor`,
+        tone: 'negative',
+      });
+    }
+  }
 
   for (const attestation of attestations) {
     entries.push({
