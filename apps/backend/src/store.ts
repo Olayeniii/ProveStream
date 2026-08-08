@@ -285,6 +285,7 @@ export class Store {
     supplier: Address;
     chain: string;
     address: Address;
+    x402ClaimUrl?: string | undefined;
   }): DestinationWallet {
     const record: DestinationWallet = { ...input, registeredAt: new Date().toISOString() };
     this.destinationWallets.set(input.supplier, record);

@@ -25,6 +25,20 @@ export interface SendRewardResult {
 }
 
 /**
+ * A full `eth_signTypedData_v4`-shaped EIP-712 payload — `types` includes
+ * `EIP712Domain` per that standard's raw JSON format, since Circle's signing
+ * API expects exactly this as a JSON string. `LocalTreasuryService` strips
+ * it back out before handing the rest to viem, which infers the domain type
+ * itself and rejects an explicit `EIP712Domain` entry.
+ */
+export interface TypedDataInput {
+  domain: { name: string; version: string; chainId: number; verifyingContract: Address };
+  types: Record<string, { name: string; type: string }[]>;
+  primaryType: string;
+  message: Record<string, unknown>;
+}
+
+/**
  * Executes USDC settlement payments from the protocol treasury. Two
  * implementations share this interface: a real Circle Developer Controlled
  * Wallet, and a local viem-signed wallet for the demo when Circle credentials
@@ -36,6 +50,8 @@ export interface TreasuryService {
   sendReward(input: SendRewardInput): Promise<SendRewardResult>;
   /** The treasury's own on-chain address — used by `bridgeService.ts` as the CCTP source. */
   getAddress(): Promise<Address>;
+  /** Signs an EIP-712 payload with the treasury's own key — used by `x402Service.ts` for gasless `transferWithAuthorization` claims. */
+  signTypedData(input: TypedDataInput): Promise<Hex>;
 }
 
 /**
@@ -100,6 +116,20 @@ class CircleTreasuryService implements TreasuryService {
     const result = await this.client.getTransaction({ id: transactionId, waitForTxHash: true });
     return { txHash: result.data.transaction.txHash as Hex };
   }
+
+  async signTypedData(input: TypedDataInput): Promise<Hex> {
+    const walletAddress = await this.getAddress();
+    const response = await this.client.signTypedData({
+      walletAddress,
+      blockchain: this.config.blockchain as TokenBlockchain,
+      data: JSON.stringify(input),
+    });
+    const signature = response.data?.signature;
+    if (!signature) {
+      throw new Error('Circle did not return a signature for the typed-data request.');
+    }
+    return signature as Hex;
+  }
 }
 
 /**
@@ -132,6 +162,18 @@ class LocalTreasuryService implements TreasuryService {
     const txHash = await this.walletClient.sendTransaction({ to: supplier, value: amount });
     await this.publicClient.waitForTransactionReceipt({ hash: txHash });
     return { txHash };
+  }
+
+  /** `EIP712Domain` is dropped from `types` — viem infers it from `domain` and rejects an explicit entry. */
+  signTypedData({ domain, types, primaryType, message }: TypedDataInput): Promise<Hex> {
+    const { EIP712Domain: _domainType, ...remainingTypes } = types;
+    return this.walletClient.signTypedData({
+      account: this.walletClient.account,
+      domain,
+      types: remainingTypes,
+      primaryType,
+      message,
+    });
   }
 }
 

@@ -124,6 +124,12 @@ export interface DestinationWallet {
   chain: string;
   address: Address;
   registeredAt: string;
+  /**
+   * An x402-gated claim endpoint the supplier exposes. When set, this takes
+   * priority over `chain`/`address` — the agent pays it directly in Arc USDC
+   * via a signed EIP-3009 authorization instead of bridging.
+   */
+  x402ClaimUrl?: string;
 }
 
 /** Lifecycle of a supplier's submitted evidence, from submission to an auditor acting on it. */

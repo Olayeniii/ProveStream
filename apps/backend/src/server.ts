@@ -46,6 +46,7 @@ const destinationWalletBodySchema = z.object({
   supplier: z.string().refine(isAddress),
   chain: z.string().min(1),
   address: z.string().min(1),
+  x402ClaimUrl: z.string().url().optional(),
 });
 
 /** Builds the Express app exposing the dashboards' read APIs and the embedded wallet bootstrap. */
@@ -171,6 +172,7 @@ export function createServer(deps: ServerDependencies): Express {
       supplier: body.data.supplier,
       chain: validation.chain,
       address: validation.address,
+      x402ClaimUrl: body.data.x402ClaimUrl,
     });
     res.json(record);
   });
