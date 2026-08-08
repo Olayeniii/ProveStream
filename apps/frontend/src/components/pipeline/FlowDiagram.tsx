@@ -25,13 +25,13 @@ export function FlowDiagram() {
       <VArrow style={{ gridColumn: 5, gridRow: 2 }} />
 
       <Node node={NODES.treasury} style={{ gridColumn: 1, gridRow: 3 }} />
-      <HArrow reverse style={{ gridColumn: 2, gridRow: 3 }} />
+      <HArrow $reverse style={{ gridColumn: 2, gridRow: 3 }} />
       <Node node={NODES.aiAgent} style={{ gridColumn: 3, gridRow: 3 }} />
       <HArrow style={{ gridColumn: 4, gridRow: 3 }} />
       <Node node={NODES.settlement} style={{ gridColumn: 5, gridRow: 3 }} />
 
       <VArrow style={{ gridColumn: 1, gridRow: 4 }} />
-      <VArrow dashed style={{ gridColumn: 5, gridRow: 4 }} />
+      <VArrow $dashed style={{ gridColumn: 5, gridRow: 4 }} />
 
       <SupplierCell style={{ gridColumn: '1 / 6', gridRow: 5 }}>
         <Node node={NODES.supplier} />
@@ -99,7 +99,7 @@ const SupplierCell = styled.div`
   margin-top: 4px;
 `;
 
-const HArrow = styled.div<{ reverse?: boolean }>`
+const HArrow = styled.div<{ $reverse?: boolean }>`
   width: 100%;
   height: 2px;
   background: ${(props) => props.theme.colors.border};
@@ -111,16 +111,16 @@ const HArrow = styled.div<{ reverse?: boolean }>`
     content: '';
     position: absolute;
     top: 50%;
-    ${(props) => (props.reverse ? 'left: 0;' : 'right: 0;')}
-    transform: translateY(-50%) ${(props) => (props.reverse ? 'rotate(180deg)' : '')};
+    ${(props) => (props.$reverse ? 'left: 0;' : 'right: 0;')}
+    transform: translateY(-50%) ${(props) => (props.$reverse ? 'rotate(180deg)' : '')};
     border: 4px solid transparent;
-    border-${(props) => (props.reverse ? 'right' : 'left')}-color: ${(props) => props.theme.colors.border};
+    border-${(props) => (props.$reverse ? 'right' : 'left')}-color: ${(props) => props.theme.colors.border};
   }
 `;
 
-const VArrow = styled.div<{ dashed?: boolean }>`
+const VArrow = styled.div<{ $dashed?: boolean }>`
   width: 2px;
   height: 24px;
-  background: ${(props) => (props.dashed ? 'transparent' : props.theme.colors.border)};
-  border-left: ${(props) => (props.dashed ? `2px dashed ${props.theme.colors.border}` : 'none')};
+  background: ${(props) => (props.$dashed ? 'transparent' : props.theme.colors.border)};
+  border-left: ${(props) => (props.$dashed ? `2px dashed ${props.theme.colors.border}` : 'none')};
 `;

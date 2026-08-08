@@ -58,10 +58,10 @@ async function main(): Promise<void> {
         appId: config.embeddedWallet.appId,
       })
     : undefined;
-  // Ordered fallback chain: Gemini first (if configured), then NVIDIA-hosted
-  // DeepSeek, then NVIDIA-hosted Mistral — each an independent, optional
-  // provider. A quota-exhausted or otherwise-down provider just falls
-  // through to the next instead of taking risk analysis offline entirely.
+  // Ordered fallback chain: Gemini first (if configured), then two
+  // NVIDIA-hosted models — each an independent, optional provider. A
+  // quota-exhausted or otherwise-down provider just falls through to the
+  // next instead of taking risk analysis offline entirely.
   const riskProviders: RiskAnalysisProvider[] = [];
   if (config.gemini) {
     riskProviders.push(
@@ -70,18 +70,13 @@ async function main(): Promise<void> {
   }
   if (config.nvidia) {
     riskProviders.push(
-      new NvidiaProvider('DeepSeek V4 Flash (NVIDIA)', {
+      new NvidiaProvider('Llama 3.1 70B (NVIDIA)', {
         apiKey: config.nvidia.apiKey,
         model: config.nvidia.deepseekModel,
-        // DeepSeek V4 is a reasoning ("thinking") model by default, which would
-        // wrap the JSON response in chain-of-thought text our prompt doesn't
-        // ask for and `extractJson()` doesn't expect. Disabling it (per
-        // NVIDIA's own DeepSeek V4 example) gets a direct answer instead.
-        extraBody: { chat_template_kwargs: { thinking: false } },
       }),
     );
     riskProviders.push(
-      new NvidiaProvider('Mistral (NVIDIA)', {
+      new NvidiaProvider('Llama 3.3 70B (NVIDIA)', {
         apiKey: config.nvidia.apiKey,
         model: config.nvidia.mistralModel,
       }),

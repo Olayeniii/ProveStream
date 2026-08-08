@@ -2,18 +2,22 @@ import type {
   AgentHealth,
   FraudAlert,
   Payment,
+  RiskAnalysis,
   SettlementJobRecord,
+  SignatureVerification,
 } from '@provenance-streams/protocol';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 
 import { AppShell } from '../components/AppShell.js';
+import { TriggerLogPanel } from '../components/TriggerLogPanel.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, AttestationRecord } from '../lib/api.js';
 import { formatRelativeTime } from '../lib/format.js';
 import type { StreamTone } from '../lib/streams.js';
 import { getToneColor } from '../lib/tone.js';
+import { buildTriggerLog } from '../lib/triggerLog.js';
 
 interface HealthState {
   backend: 'ok' | 'error' | 'checking';
@@ -40,6 +44,30 @@ const JOB_STATE_LABEL: Record<SettlementJobRecord['state'], string> = {
   failed: 'Failed',
 };
 
+/**
+ * `SettlementJobRecord.state` is queue mechanics, not proof money moved — a
+ * reward id can be reused across a fresh contract deployment or a snapshot
+ * reset, leaving a stale 'settled' job entry for a reward that never
+ * actually paid out under its current Payment record. `Payment.status` is
+ * the one driven directly by a confirmed txHash, so when both exist for the
+ * same reward, it wins.
+ */
+function settlementJobLabel(job: SettlementJobRecord, payments: Payment[]): string {
+  const payment = payments.find((entry) => entry.rewardId === job.rewardId);
+  if (payment) {
+    if (payment.status === 'complete') {
+      return 'Settled';
+    }
+    if (payment.status === 'failed') {
+      return 'Failed';
+    }
+    if (job.state === 'settled') {
+      return 'Pending';
+    }
+  }
+  return JOB_STATE_LABEL[job.state];
+}
+
 export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
   const [attestations, setAttestations] = useState<AttestationRecord[]>([]);
   const [health, setHealth] = useState<HealthState>({ backend: 'checking', treasury: 'checking' });
@@ -47,6 +75,8 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
   const [settlementQueue, setSettlementQueue] = useState<SettlementJobRecord[]>([]);
   const [fraudAlerts, setFraudAlerts] = useState<FraudAlert[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [riskAnalyses, setRiskAnalyses] = useState<RiskAnalysis[]>([]);
+  const [signatureVerifications, setSignatureVerifications] = useState<SignatureVerification[]>([]);
   const [alertActionError, setAlertActionError] = useState<string | undefined>(undefined);
 
   const refresh = useCallback(() => {
@@ -70,7 +100,28 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
       .listPayments()
       .then(setPayments)
       .catch(() => undefined);
+    api
+      .listRiskAnalyses()
+      .then(setRiskAnalyses)
+      .catch(() => undefined);
+    api
+      .listSignatureVerifications()
+      .then(setSignatureVerifications)
+      .catch(() => undefined);
   }, [api]);
+
+  const triggerLog = useMemo(
+    () =>
+      buildTriggerLog(
+        attestations,
+        payments,
+        riskAnalyses,
+        signatureVerifications,
+        fraudAlerts,
+        settlementQueue,
+      ),
+    [attestations, payments, riskAnalyses, signatureVerifications, fraudAlerts, settlementQueue],
+  );
 
   useEffect(() => {
     refresh();
@@ -204,7 +255,7 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
               <ListItem key={job.rewardId}>
                 <span>Reward #{job.rewardId}</span>
                 <span>
-                  {JOB_STATE_LABEL[job.state]}
+                  {settlementJobLabel(job, payments)}
                   {job.attempt ? ` (attempt ${job.attempt.toString()})` : ''}
                 </span>
               </ListItem>
@@ -248,6 +299,11 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
           </List>
         )}
       </Section>
+
+      <Card>
+        <SectionTitle>Trigger log</SectionTitle>
+        <TriggerLogPanel entries={triggerLog} />
+      </Card>
     </AppShell>
   );
 }

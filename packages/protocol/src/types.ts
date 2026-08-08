@@ -126,6 +126,30 @@ export interface DestinationWallet {
   registeredAt: string;
 }
 
+/** Lifecycle of a supplier's submitted evidence, from submission to an auditor acting on it. */
+export type EvidenceSubmissionStatus = 'pending' | 'attested' | 'rejected';
+
+/**
+ * Evidence a supplier submits ahead of time, for an auditor to review and
+ * attest to — closes the gap where an auditor previously had no channel from
+ * the supplier and typed evidence in from scratch. `proofHash` is computed
+ * server-side from `evidenceText` at submission time (`keccak256(toHex(...))`,
+ * matching what `AttestationRegistry` expects on-chain), so the auditor's
+ * "Attest" action can reuse it exactly rather than re-hashing.
+ */
+export interface EvidenceSubmission {
+  id: string;
+  supplier: Address;
+  policyId: string;
+  proofHash: Hex;
+  evidenceText: string;
+  status: EvidenceSubmissionStatus;
+  createdAt: string;
+  updatedAt: string;
+  /** Set once an auditor attests using this submission's `proofHash`. */
+  attestationId?: string;
+}
+
 /** Lifecycle of a payout the agent's fraud checks held for admin review. */
 export type FraudAlertStatus = 'flagged' | 'approved' | 'rejected';
 

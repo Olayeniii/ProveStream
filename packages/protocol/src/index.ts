@@ -10,6 +10,8 @@ export type {
   Attestation,
   AttestationSubmittedEventArgs,
   DestinationWallet,
+  EvidenceSubmission,
+  EvidenceSubmissionStatus,
   FraudAlert,
   FraudAlertStatus,
   Payment,
