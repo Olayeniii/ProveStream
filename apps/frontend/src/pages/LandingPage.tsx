@@ -81,35 +81,45 @@ export function LandingPage({ env, api }: { env: AppEnv; api: ApiClient }) {
       </NavBar>
 
       <Hero>
-        <HeroGlow />
-        <StreamOrb
-          size={120}
-          verification={attestations.length > 0 ? 100 : 0}
-          confidence={policies.length > 0 ? 100 : 0}
-          rewardSettled={suppliersPaid !== undefined && suppliersPaid > 0}
-        />
+        <HeroVisual>
+          <BackgroundRings aria-hidden="true">
+            <svg viewBox="0 0 100 100" width="100%" height="100%">
+              <circle cx={50} cy={50} r={30} />
+              <circle cx={50} cy={50} r={40} />
+              <circle cx={50} cy={50} r={49} />
+            </svg>
+          </BackgroundRings>
+          <StreamOrb
+            size={220}
+            verification={attestations.length > 0 ? 100 : 0}
+            confidence={policies.length > 0 ? 100 : 0}
+            rewardSettled={suppliersPaid !== undefined && suppliersPaid > 0}
+          />
+        </HeroVisual>
 
-        <Headline>
-          Provenance you can <HAccent1>attest</HAccent1>, <HAccent2>verify</HAccent2>, and{' '}
-          <HAccent3>settle</HAccent3>, autonomously.
-        </Headline>
+        <HeroCopy>
+          <Headline>
+            Provenance you can <HAccent>attest</HAccent>, <HAccent>verify</HAccent>, and{' '}
+            <HAccent>settle</HAccent>, autonomously.
+          </Headline>
 
-        <Tagline>
-          An autonomous USDC settlement engine on Circle&apos;s Arc chain. An auditor attests, AI
-          and on-chain checks review it, and the supplier gets paid. No human in the loop for the
-          normal case, real money moving on a real chain.
-        </Tagline>
+          <Tagline>
+            An autonomous USDC settlement engine on Circle&apos;s Arc chain. An auditor attests, AI
+            and on-chain checks review it, and the supplier gets paid. No human in the loop for the
+            normal case, real money moving on a real chain.
+          </Tagline>
 
-        <CtaRow>
-          <PrimaryCta href="#/streams" target="_blank" rel="noopener noreferrer">
-            <Rocket size={16} />
-            Launch App
-          </PrimaryCta>
-          <SecondaryCta to="/how-it-works">
-            <BookOpen size={16} />
-            Read the docs
-          </SecondaryCta>
-        </CtaRow>
+          <CtaRow>
+            <PrimaryCta href="#/streams" target="_blank" rel="noopener noreferrer">
+              <Rocket size={16} />
+              Launch App
+            </PrimaryCta>
+            <SecondaryCta to="/how-it-works">
+              <BookOpen size={16} />
+              Read the docs
+            </SecondaryCta>
+          </CtaRow>
+        </HeroCopy>
       </Hero>
 
       <StatsStrip>
@@ -194,66 +204,89 @@ const LaunchButtonSmall = styled.a`
 `;
 
 const Hero = styled.div`
-  position: relative;
   flex: 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 24px;
-  text-align: center;
-  padding: 64px 24px;
+  gap: 72px;
+  padding: 64px 48px;
+
+  @media (max-width: 860px) {
+    flex-direction: column;
+    text-align: center;
+    gap: 40px;
+    padding: 48px 24px;
+  }
 `;
 
-// Ambient light from the Orb itself, not decorative filler — the hero reads
-// stark without it once the source is the only visual besides text.
-const HeroGlow = styled.div`
+const HeroVisual = styled.div`
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+// Large, faint echoes of the Orb's own ring motif — texture drawn from the
+// product's actual visual language, not a generic decorative blob.
+const BackgroundRings = styled.div`
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 560px;
-  height: 560px;
-  max-width: 90vw;
-  border-radius: 999px;
-  background: radial-gradient(
-    circle,
-    ${(props) => props.theme.streamKit.reward}14 0%,
-    transparent 70%
-  );
+  inset: -180px;
   pointer-events: none;
-  z-index: -1;
+
+  svg circle {
+    fill: none;
+    stroke: ${(props) => props.theme.colors.slate};
+    stroke-width: 0.4;
+    stroke-opacity: 0.12;
+  }
+
+  @media (max-width: 860px) {
+    inset: -80px;
+  }
+`;
+
+const HeroCopy = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 24px;
+  max-width: 560px;
+
+  @media (max-width: 860px) {
+    align-items: center;
+  }
 `;
 
 const Headline = styled.h1`
   margin: 0;
-  max-width: 720px;
   font-family: ${(props) => props.theme.displayFontFamily};
-  font-size: clamp(2.1rem, 4.8vw, 3.2rem);
+  font-size: clamp(2.1rem, 3.6vw, 2.9rem);
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: -0.02em;
+  text-align: left;
   color: ${(props) => props.theme.colors.text};
+
+  @media (max-width: 860px) {
+    text-align: center;
+  }
 `;
 
-const HAccent1 = styled.span`
-  color: ${(props) => props.theme.colors.primary};
-`;
-
-const HAccent2 = styled.span`
-  color: ${(props) => props.theme.colors.mint};
-`;
-
-const HAccent3 = styled.span`
-  color: ${(props) => props.theme.colors.violet};
+// One accent, matching the Orb's own gold — not a rainbow per word.
+const HAccent = styled.span`
+  color: ${(props) => props.theme.streamKit.reward};
 `;
 
 const Tagline = styled.p`
   margin: 0;
-  max-width: 600px;
   font-size: 1.02rem;
   line-height: 1.6;
   color: ${(props) => props.theme.colors.textMuted};
+
+  @media (max-width: 860px) {
+    text-align: center;
+  }
 `;
 
 const CtaRow = styled.div`

@@ -18,9 +18,14 @@ ignition/deployments/
 !.vscode/extensions.json
 
 Documents/
-dashboardview.png
 .github/instructions/
 .github/copilot-instructions.md
+
+dashboardview.png
+
+# Ad-hoc root-level screenshots from manual/Playwright verification passes
+/*.png
+.playwright-mcp/
 
 # Local-only cache of the backend's read models + chain-scan progress, so a
 # restart doesn't need to re-scan full history from each contract's
