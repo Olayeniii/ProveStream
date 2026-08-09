@@ -5,7 +5,7 @@ import { network } from 'hardhat';
 import { keccak256, toHex } from 'viem';
 
 void describe('RewardDispatcher', async function () {
-  const { viem } = await network.create();
+  const { viem, networkHelpers } = await network.create();
   const [ownerClient, supplierClient, auditorClient] = await viem.getWalletClients();
   assert.ok(ownerClient);
   assert.ok(supplierClient);
@@ -36,7 +36,7 @@ void describe('RewardDispatcher', async function () {
 
   void it('dispatches a reward for an attestation under an enabled policy', async function () {
     const { attestationRegistry, rewardPolicy, rewardDispatcher } = await deploy();
-    await rewardPolicy.write.createPolicy([credentialType, 500n]);
+    await rewardPolicy.write.createPolicy([credentialType, 500n, 0n, 0n]);
     await submitAttestation(attestationRegistry, 1n, 'evidence-1');
 
     await viem.assertions.emitWithArgs(
@@ -51,7 +51,7 @@ void describe('RewardDispatcher', async function () {
 
   void it('rejects a second dispatch for the same attestation', async function () {
     const { attestationRegistry, rewardPolicy, rewardDispatcher } = await deploy();
-    await rewardPolicy.write.createPolicy([credentialType, 500n]);
+    await rewardPolicy.write.createPolicy([credentialType, 500n, 0n, 0n]);
     await submitAttestation(attestationRegistry, 1n, 'evidence-1');
     await rewardDispatcher.write.dispatchReward([1n]);
 
@@ -65,7 +65,7 @@ void describe('RewardDispatcher', async function () {
 
   void it('rejects dispatch when the referenced policy is disabled', async function () {
     const { attestationRegistry, rewardPolicy, rewardDispatcher } = await deploy();
-    await rewardPolicy.write.createPolicy([credentialType, 500n]);
+    await rewardPolicy.write.createPolicy([credentialType, 500n, 0n, 0n]);
     await rewardPolicy.write.disablePolicy([1n]);
     await submitAttestation(attestationRegistry, 1n, 'evidence-1');
 
@@ -90,7 +90,7 @@ void describe('RewardDispatcher', async function () {
 
   void it('assigns sequential reward ids across multiple attestations', async function () {
     const { attestationRegistry, rewardPolicy, rewardDispatcher } = await deploy();
-    await rewardPolicy.write.createPolicy([credentialType, 500n]);
+    await rewardPolicy.write.createPolicy([credentialType, 500n, 0n, 0n]);
     await submitAttestation(attestationRegistry, 1n, 'evidence-a');
     await submitAttestation(attestationRegistry, 1n, 'evidence-b');
 
@@ -100,6 +100,76 @@ void describe('RewardDispatcher', async function () {
       rewardDispatcher,
       'RewardEligible',
       [2n, supplierClient.account.address, 1n, 500n],
+    );
+  });
+
+  void it('rejects a second dispatch for the same supplier within the policy cooldown', async function () {
+    const { attestationRegistry, rewardPolicy, rewardDispatcher } = await deploy();
+    await rewardPolicy.write.createPolicy([credentialType, 500n, 3600n, 0n]);
+    await submitAttestation(attestationRegistry, 1n, 'evidence-a');
+    await submitAttestation(attestationRegistry, 1n, 'evidence-b');
+    await rewardDispatcher.write.dispatchReward([1n]);
+
+    const availableAt = BigInt(await networkHelpers.time.latest()) + 3600n;
+    await viem.assertions.revertWithCustomErrorWithArgs(
+      rewardDispatcher.write.dispatchReward([2n]),
+      rewardDispatcher,
+      'CooldownActive',
+      [1n, supplierClient.account.address, availableAt],
+    );
+  });
+
+  void it('allows a second dispatch once the policy cooldown has elapsed', async function () {
+    const { attestationRegistry, rewardPolicy, rewardDispatcher } = await deploy();
+    await rewardPolicy.write.createPolicy([credentialType, 500n, 3600n, 0n]);
+    await submitAttestation(attestationRegistry, 1n, 'evidence-a');
+    await submitAttestation(attestationRegistry, 1n, 'evidence-b');
+    await rewardDispatcher.write.dispatchReward([1n]);
+
+    await networkHelpers.time.increase(3600);
+
+    await viem.assertions.emitWithArgs(
+      rewardDispatcher.write.dispatchReward([2n]),
+      rewardDispatcher,
+      'RewardEligible',
+      [2n, supplierClient.account.address, 1n, 500n],
+    );
+  });
+
+  void it('rejects dispatch once a supplier hits the policy per-supplier reward cap', async function () {
+    const { attestationRegistry, rewardPolicy, rewardDispatcher } = await deploy();
+    await rewardPolicy.write.createPolicy([credentialType, 500n, 0n, 2n]);
+    await submitAttestation(attestationRegistry, 1n, 'evidence-a');
+    await submitAttestation(attestationRegistry, 1n, 'evidence-b');
+    await submitAttestation(attestationRegistry, 1n, 'evidence-c');
+
+    await rewardDispatcher.write.dispatchReward([1n]);
+    await rewardDispatcher.write.dispatchReward([2n]);
+
+    await viem.assertions.revertWithCustomErrorWithArgs(
+      rewardDispatcher.write.dispatchReward([3n]),
+      rewardDispatcher,
+      'MaxRewardsExceeded',
+      [1n, supplierClient.account.address, 2n],
+    );
+  });
+
+  void it('tracks cooldown and reward cap separately per policy', async function () {
+    const { attestationRegistry, rewardPolicy, rewardDispatcher } = await deploy();
+    const otherCredentialType = keccak256(toHex('ISO-14001'));
+    await rewardPolicy.write.createPolicy([credentialType, 500n, 3600n, 1n]);
+    await rewardPolicy.write.createPolicy([otherCredentialType, 500n, 0n, 0n]);
+    await submitAttestation(attestationRegistry, 1n, 'evidence-a');
+    await submitAttestation(attestationRegistry, 2n, 'evidence-b');
+    await rewardDispatcher.write.dispatchReward([1n]);
+
+    // Same supplier, but a different policy with no cooldown/cap of its own —
+    // unaffected by policy 1's restrictions having just been hit.
+    await viem.assertions.emitWithArgs(
+      rewardDispatcher.write.dispatchReward([2n]),
+      rewardDispatcher,
+      'RewardEligible',
+      [2n, supplierClient.account.address, 2n, 500n],
     );
   });
 });

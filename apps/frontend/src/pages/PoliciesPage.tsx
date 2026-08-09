@@ -38,7 +38,10 @@ export function PoliciesPage({ env, api }: { env: AppEnv; api: ApiClient }) {
         address: env.rewardPolicyAddress,
         abi: rewardPolicyAbi,
         functionName: 'createPolicy',
-        args: [encodeCredentialType(credentialType), parseUnits(rewardAmount, 18)],
+        // Cooldown/per-supplier cap are real on-chain controls now (see
+        // RewardDispatcher.sol), just not yet exposed in this form — 0 means
+        // "no restriction," preserving today's policy-creation behavior.
+        args: [encodeCredentialType(credentialType), parseUnits(rewardAmount, 18), 0n, 0n],
         chain: walletClient.chain,
         account: walletClient.account!,
       });

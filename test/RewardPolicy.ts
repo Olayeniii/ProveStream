@@ -20,7 +20,7 @@ void describe('RewardPolicy', async function () {
     const rewardPolicy = await deploy();
 
     await viem.assertions.emitWithArgs(
-      rewardPolicy.write.createPolicy([credentialType, 100n]),
+      rewardPolicy.write.createPolicy([credentialType, 100n, 0n, 0n]),
       rewardPolicy,
       'PolicyCreated',
       [1n, credentialType, 100n],
@@ -32,13 +32,24 @@ void describe('RewardPolicy', async function () {
     assert.equal(policy.rewardAmount, 100n);
     assert.equal(policy.enabled, true);
     assert.ok(policy.createdAt > 0n);
+    assert.equal(policy.cooldownSeconds, 0n);
+    assert.equal(policy.maxRewardsPerSupplier, 0n);
+  });
+
+  void it('stores a non-zero cooldown and per-supplier cap', async function () {
+    const rewardPolicy = await deploy();
+    await rewardPolicy.write.createPolicy([credentialType, 100n, 3600n, 5n]);
+
+    const policy = await rewardPolicy.read.getPolicy([1n]);
+    assert.equal(policy.cooldownSeconds, 3600n);
+    assert.equal(policy.maxRewardsPerSupplier, 5n);
   });
 
   void it('rejects policy creation from a non-owner', async function () {
     const rewardPolicy = await deploy();
 
     await viem.assertions.revertWithCustomError(
-      rewardPolicy.write.createPolicy([credentialType, 100n], {
+      rewardPolicy.write.createPolicy([credentialType, 100n, 0n, 0n], {
         account: strangerClient.account,
       }),
       rewardPolicy,
@@ -50,7 +61,7 @@ void describe('RewardPolicy', async function () {
     const rewardPolicy = await deploy();
 
     await viem.assertions.revertWithCustomError(
-      rewardPolicy.write.createPolicy([credentialType, 0n]),
+      rewardPolicy.write.createPolicy([credentialType, 0n, 0n, 0n]),
       rewardPolicy,
       'InvalidRewardAmount',
     );
@@ -58,7 +69,7 @@ void describe('RewardPolicy', async function () {
 
   void it('updates the reward amount of an existing policy', async function () {
     const rewardPolicy = await deploy();
-    await rewardPolicy.write.createPolicy([credentialType, 100n]);
+    await rewardPolicy.write.createPolicy([credentialType, 100n, 0n, 0n]);
 
     await viem.assertions.emitWithArgs(
       rewardPolicy.write.updatePolicy([1n, 250n]),
@@ -73,7 +84,7 @@ void describe('RewardPolicy', async function () {
 
   void it('disables a policy', async function () {
     const rewardPolicy = await deploy();
-    await rewardPolicy.write.createPolicy([credentialType, 100n]);
+    await rewardPolicy.write.createPolicy([credentialType, 100n, 0n, 0n]);
 
     await viem.assertions.emitWithArgs(
       rewardPolicy.write.disablePolicy([1n]),

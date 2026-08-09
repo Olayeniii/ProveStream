@@ -5,9 +5,12 @@ import type {
   RiskAnalysis,
   SignatureVerification,
 } from '@provenance-streams/protocol';
-import { SUPPORTED_DESTINATION_CHAINS } from '@provenance-streams/protocol';
+import {
+  SUPPORTED_DESTINATION_CHAINS,
+  validateDestinationWallet,
+} from '@provenance-streams/protocol';
 import { useEffect, useMemo, useState } from 'react';
-import { formatEther, isAddress } from 'viem';
+import { formatEther } from 'viem';
 import styled from 'styled-components';
 
 import { AppShell } from '../components/AppShell.js';
@@ -157,8 +160,12 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
     if (!wallet.walletAddress) {
       return;
     }
-    if (!isAddress(destinationAddress)) {
-      setDestinationError('Enter a valid EVM address.');
+    const validation = validateDestinationWallet({
+      chain: destinationChain,
+      address: destinationAddress,
+    });
+    if (!validation.valid) {
+      setDestinationError(validation.error);
       return;
     }
     setDestinationError(undefined);
@@ -278,7 +285,7 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
                 ))}
               </Select>
               <Input
-                placeholder="0x…"
+                placeholder={destinationChain === 'Solana_Devnet' ? 'Solana address' : '0x…'}
                 value={destinationAddress}
                 onChange={(event) => setDestinationAddress(event.target.value)}
               />

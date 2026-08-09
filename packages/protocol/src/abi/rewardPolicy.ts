@@ -11,6 +11,8 @@ export const rewardPolicyAbi = [
     inputs: [
       { name: 'credentialType', type: 'bytes32' },
       { name: 'rewardAmount', type: 'uint256' },
+      { name: 'cooldownSeconds', type: 'uint256' },
+      { name: 'maxRewardsPerSupplier', type: 'uint256' },
     ],
     outputs: [{ name: 'id', type: 'uint256' }],
   },
@@ -46,6 +48,8 @@ export const rewardPolicyAbi = [
           { name: 'rewardAmount', type: 'uint256' },
           { name: 'enabled', type: 'bool' },
           { name: 'createdAt', type: 'uint256' },
+          { name: 'cooldownSeconds', type: 'uint256' },
+          { name: 'maxRewardsPerSupplier', type: 'uint256' },
         ],
       },
     ],

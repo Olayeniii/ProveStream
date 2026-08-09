@@ -21,6 +21,8 @@ contract RewardDispatcher {
 
     error AlreadyDispatched(uint256 attestationId);
     error PolicyNotEnabled(uint256 policyId);
+    error CooldownActive(uint256 policyId, address supplier, uint256 availableAt);
+    error MaxRewardsExceeded(uint256 policyId, address supplier, uint256 maxRewardsPerSupplier);
 
     IAttestationRegistry public immutable attestationRegistry;
     IRewardPolicy public immutable rewardPolicy;
@@ -29,6 +31,9 @@ contract RewardDispatcher {
     uint256 private _nextRewardId = 1;
 
     mapping(uint256 attestationId => bool dispatched) private _dispatched;
+    mapping(uint256 policyId => mapping(address supplier => uint256 timestamp))
+        private _lastDispatchedAt;
+    mapping(uint256 policyId => mapping(address supplier => uint256 count)) private _dispatchCount;
 
     constructor(address attestationRegistryAddress, address rewardPolicyAddress) {
         attestationRegistry = IAttestationRegistry(attestationRegistryAddress);
@@ -55,7 +60,34 @@ contract RewardDispatcher {
             revert PolicyNotEnabled(attestation.policyId);
         }
 
+        if (policy.cooldownSeconds > 0) {
+            uint256 lastDispatchedAt = _lastDispatchedAt[attestation.policyId][
+                attestation.supplier
+            ];
+            uint256 availableAt = lastDispatchedAt + policy.cooldownSeconds;
+            if (lastDispatchedAt > 0 && block.timestamp < availableAt) {
+                revert CooldownActive(attestation.policyId, attestation.supplier, availableAt);
+            }
+        }
+
+        if (policy.maxRewardsPerSupplier > 0) {
+            if (
+                _dispatchCount[attestation.policyId][attestation.supplier] >=
+                policy.maxRewardsPerSupplier
+            ) {
+                revert MaxRewardsExceeded(
+                    attestation.policyId,
+                    attestation.supplier,
+                    policy.maxRewardsPerSupplier
+                );
+            }
+        }
+
         _dispatched[attestationId] = true;
+        _lastDispatchedAt[attestation.policyId][attestation.supplier] = block.timestamp;
+        unchecked {
+            _dispatchCount[attestation.policyId][attestation.supplier] += 1;
+        }
 
         rewardId = _nextRewardId;
         unchecked {

@@ -32,5 +32,6 @@ dashboardview.png
 # deployment block (see apps/backend/src/services/snapshotStore.ts).
 apps/backend/.store-snapshot.json
 
-# Demo video tooling (Remotion) — local-only, not tracked.
-apps/demo-video/
+# Demo video tooling (Remotion) — standalone, not an npm workspace member,
+# local-only, not tracked.
+/demo-video/

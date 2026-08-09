@@ -291,7 +291,9 @@ export function runAgent(configInput: AgentConfigInput, hooks: RunAgentHooks = {
         }
 
         if (destination) {
-          if (!SUPPORTED_DESTINATION_CHAINS.includes(destination.chain as SupportedDestinationChain)) {
+          if (
+            !SUPPORTED_DESTINATION_CHAINS.includes(destination.chain as SupportedDestinationChain)
+          ) {
             throw new Error(
               `Unsupported destination chain "${destination.chain}" for reward ${rewardId.toString()}.`,
             );

@@ -53,4 +53,22 @@ export const rewardDispatcherAbi = [
     name: 'PolicyNotEnabled',
     inputs: [{ name: 'policyId', type: 'uint256' }],
   },
+  {
+    type: 'error',
+    name: 'CooldownActive',
+    inputs: [
+      { name: 'policyId', type: 'uint256' },
+      { name: 'supplier', type: 'address' },
+      { name: 'availableAt', type: 'uint256' },
+    ],
+  },
+  {
+    type: 'error',
+    name: 'MaxRewardsExceeded',
+    inputs: [
+      { name: 'policyId', type: 'uint256' },
+      { name: 'supplier', type: 'address' },
+      { name: 'maxRewardsPerSupplier', type: 'uint256' },
+    ],
+  },
 ] as const;

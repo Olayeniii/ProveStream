@@ -32,10 +32,16 @@ contract RewardPolicy is IRewardPolicy, Ownable {
     /// @notice Creates a new reward policy.
     /// @param credentialType Identifier for the credential/attestation category this policy rewards.
     /// @param rewardAmount Reward amount in the smallest unit of the native token. Must be positive.
+    /// @param cooldownSeconds Minimum seconds between two dispatched rewards for the same
+    /// supplier under this policy. 0 means no cooldown. Set once at creation, like `credentialType`.
+    /// @param maxRewardsPerSupplier Maximum number of rewards a single supplier may ever receive
+    /// under this policy. 0 means unlimited. Set once at creation, like `credentialType`.
     /// @return id The id assigned to the new policy.
     function createPolicy(
         bytes32 credentialType,
-        uint256 rewardAmount
+        uint256 rewardAmount,
+        uint256 cooldownSeconds,
+        uint256 maxRewardsPerSupplier
     ) external onlyOwner returns (uint256 id) {
         if (rewardAmount == 0) {
             revert InvalidRewardAmount();
@@ -51,7 +57,9 @@ contract RewardPolicy is IRewardPolicy, Ownable {
             credentialType: credentialType,
             rewardAmount: rewardAmount,
             enabled: true,
-            createdAt: block.timestamp
+            createdAt: block.timestamp,
+            cooldownSeconds: cooldownSeconds,
+            maxRewardsPerSupplier: maxRewardsPerSupplier
         });
 
         emit PolicyCreated(id, credentialType, rewardAmount);
