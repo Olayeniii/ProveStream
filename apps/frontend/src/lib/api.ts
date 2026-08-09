@@ -87,7 +87,12 @@ export function createApiClient(baseUrl: string) {
     listSignatureVerifications: () =>
       request<SignatureVerification[]>(baseUrl, '/api/signature-verifications'),
 
-    registerDestinationWallet: (input: { supplier: string; chain: string; address: string }) =>
+    registerDestinationWallet: (input: {
+      supplier: string;
+      chain: string;
+      address: string;
+      x402ClaimUrl?: string;
+    }) =>
       request<DestinationWallet>(baseUrl, '/api/destination-wallet', {
         method: 'POST',
         body: JSON.stringify(input),

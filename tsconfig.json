@@ -9,6 +9,7 @@
     "scripts/**/*.ts",
     "test/**/*.ts",
     "ignition/**/*.ts",
-    "artifacts/**/*.d.ts"
+    "artifacts/**/*.d.ts",
+    "demo/**/*.ts"
   ]
 }

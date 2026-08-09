@@ -138,6 +138,7 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
 
   const [destinationChain, setDestinationChain] = useState<string>(SUPPORTED_DESTINATION_CHAINS[0]);
   const [destinationAddress, setDestinationAddress] = useState('');
+  const [destinationX402ClaimUrl, setDestinationX402ClaimUrl] = useState('');
   const [destinationError, setDestinationError] = useState<string | undefined>(undefined);
   const [savingDestination, setSavingDestination] = useState(false);
   const [editingDestination, setEditingDestination] = useState(false);
@@ -146,6 +147,7 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
     if (destinationWallet) {
       setDestinationChain(destinationWallet.chain);
       setDestinationAddress(destinationWallet.address);
+      setDestinationX402ClaimUrl(destinationWallet.x402ClaimUrl ?? '');
     }
     setDestinationError(undefined);
     setEditingDestination(true);
@@ -166,6 +168,7 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
         supplier: wallet.walletAddress,
         chain: destinationChain,
         address: destinationAddress,
+        ...(destinationX402ClaimUrl ? { x402ClaimUrl: destinationX402ClaimUrl } : {}),
       })
       .then((record) => {
         setDestinationWallet(record);
@@ -240,7 +243,9 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
           <SectionTitle>Destination wallet</SectionTitle>
           <HelperText>
             Register a wallet on another chain to receive rewards there instead of on Arc — the
-            agent bridges canonical USDC to it via Circle CCTP.
+            agent bridges canonical USDC to it via Circle CCTP. Optionally add an x402 claim URL
+            (see below) to be paid directly instead — it takes priority over the chain/address above
+            when set.
           </HelperText>
           {destinationWallet && !editingDestination ? (
             <StatRow>
@@ -252,6 +257,12 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
                 <StatLabel>Address</StatLabel>
                 <StatValue as="code">{destinationWallet.address}</StatValue>
               </Stat>
+              {destinationWallet.x402ClaimUrl && (
+                <Stat>
+                  <StatLabel>x402 claim URL</StatLabel>
+                  <StatValue as="code">{destinationWallet.x402ClaimUrl}</StatValue>
+                </Stat>
+              )}
               <EditButton onClick={handleEditDestination}>Edit</EditButton>
             </StatRow>
           ) : (
@@ -270,6 +281,11 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
                 placeholder="0x…"
                 value={destinationAddress}
                 onChange={(event) => setDestinationAddress(event.target.value)}
+              />
+              <Input
+                placeholder="x402 claim URL (optional)"
+                value={destinationX402ClaimUrl}
+                onChange={(event) => setDestinationX402ClaimUrl(event.target.value)}
               />
               <Button onClick={handleRegisterDestination} disabled={savingDestination}>
                 {savingDestination ? 'Saving…' : destinationWallet ? 'Save' : 'Register'}

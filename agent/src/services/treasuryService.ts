@@ -58,7 +58,7 @@ export interface TreasuryService {
   sendReward(input: SendRewardInput): Promise<SendRewardResult>;
   /** The treasury's own on-chain address — used by `bridgeService.ts` as the CCTP source. */
   getAddress(): Promise<Address>;
-  /** Signs an EIP-712 payload with the treasury's own key — used by `x402Service.ts` for gasless `transferWithAuthorization` claims. */
+  /** Signs an EIP-712 payload with the treasury's own key — used by `x402Service.ts` to sign Circle Gateway `BurnIntent`s for x402 claims. */
   signTypedData(input: TypedDataInput): Promise<Hex>;
 }
 

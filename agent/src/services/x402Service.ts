@@ -124,7 +124,13 @@ export class X402Service {
   ) {}
 
   async claim(input: X402ClaimInput): Promise<X402ClaimResult> {
-    const claimUrl = `${input.claimUrl}${input.claimUrl.includes('?') ? '&' : '?'}rewardId=${encodeURIComponent(input.rewardId)}`;
+    // `amount` is passed as a hint, not authority — real x402 sellers price from
+    // their own records, but this protocol has no shared price catalog between
+    // the agent and a supplier's claim endpoint, so the endpoint is expected to
+    // echo it back in its own `accepts[]`; `claim()` still independently checks
+    // that echo matches `input.amount` below before paying anything.
+    const separator = input.claimUrl.includes('?') ? '&' : '?';
+    const claimUrl = `${input.claimUrl}${separator}rewardId=${encodeURIComponent(input.rewardId)}&amount=${input.amount.toString()}`;
 
     const challengeResponse = await fetch(claimUrl);
     if (challengeResponse.status !== 402) {

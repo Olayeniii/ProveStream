@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
+    "deposit-to-gateway": "tsx scripts/depositToGateway.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
