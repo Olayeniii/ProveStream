@@ -1,5 +1,6 @@
 import type { AgentControl, TreasuryService } from '@provenance-streams/agent';
 import { validateDestinationWallet } from '@provenance-streams/agent';
+import type { EvidenceSubmission } from '@provenance-streams/protocol';
 import { isAddress, isHex } from 'viem';
 import cors from 'cors';
 import express from 'express';
@@ -26,6 +27,12 @@ export interface ServerDependencies {
    * full RBAC. The long-term fix is identity-backed, tied to a real wallet session.
    */
   adminToken: string;
+  /**
+   * Called after a new evidence submission is persisted — lets the host retry
+   * risk analysis for an already-attested proofHash match (see `main.ts`'s
+   * `tryAnalyzeRiskForNewEvidence`), since `onAttestation` only ever fires once.
+   */
+  onEvidenceSubmitted?: (submission: EvidenceSubmission) => void;
 }
 
 const adminLoginBodySchema = z.object({ token: z.string().min(1) });
@@ -136,6 +143,7 @@ export function createServer(deps: ServerDependencies): Express {
       policyId: body.data.policyId,
       evidenceText: body.data.evidenceText,
     });
+    deps.onEvidenceSubmitted?.(record);
     res.json(record);
   });
 

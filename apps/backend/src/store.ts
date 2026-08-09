@@ -237,6 +237,10 @@ export class Store {
     return [...this.riskAnalyses.values()];
   }
 
+  getRiskAnalysis(attestationId: string): RiskAnalysis | undefined {
+    return this.riskAnalyses.get(attestationId);
+  }
+
   createPendingSignatureVerification(attestationId: string): void {
     const now = new Date().toISOString();
     this.signatureVerifications.set(attestationId, {

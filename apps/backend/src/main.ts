@@ -1,4 +1,5 @@
 import { createTreasuryService, parseAgentConfig, runAgent } from '@provenance-streams/agent';
+import type { EvidenceSubmission } from '@provenance-streams/protocol';
 import type { Address, Hex } from 'viem';
 
 import { loadServerConfig } from './env.js';
@@ -115,6 +116,76 @@ async function main(): Promise<void> {
           error: error instanceof Error ? error.message : 'Signature verification failed.',
         });
       });
+  }
+
+  /**
+   * Runs risk analysis for `attestationId` given real evidence text, and
+   * records the result. Shared by the live `onAttestation` hook and
+   * `tryAnalyzeRiskForNewEvidence` (evidence submitted *after* its matching
+   * attestation already happened) so both go through identical logic.
+   */
+  function runRiskAnalysis(
+    attestationId: string,
+    evidenceText: string,
+    policyId: string,
+  ): Promise<RiskAnalysisResult | undefined> {
+    if (!riskAnalysisService) {
+      return Promise.resolve(undefined);
+    }
+    store.createPendingRiskAnalysis(attestationId);
+    return riskAnalysisService
+      .analyzeEvidence({ evidenceText, policyId })
+      .then((result) => {
+        store.updateRiskAnalysisStatus(attestationId, 'complete', result);
+        return result;
+      })
+      .catch((error: unknown) => {
+        // Each provider's raw error (status codes, quota details, model ids) is
+        // already logged as it happens inside RiskAnalysisService — what reaches
+        // the store/UI here must stay a clean, model-agnostic message; never the
+        // raw multi-provider dump `error` carries.
+        console.error('Risk analysis unavailable for attestation', attestationId, error);
+        store.updateRiskAnalysisStatus(attestationId, 'failed', {
+          error: 'AI risk analysis is temporarily unavailable.',
+        });
+        return undefined;
+      });
+  }
+
+  /**
+   * `onAttestation` only fires once, live, when an attestation's own event is
+   * first observed — evidence submitted afterwards (a resubmission for
+   * already-attested work, or a supplier who submits evidence post-hoc) never
+   * gets picked up by it, and risk analysis can't be backfilled from chain
+   * history alone (evidence text isn't on-chain, only its hash is — see the
+   * history-backfill loop below). This bridges that gap: finds an attestation
+   * from the same supplier/policy whose on-chain proofHash matches this
+   * evidence, and — if it hasn't been analyzed yet — runs it now. Bounded by
+   * how many attestations a demo-scale supplier actually has; each candidate
+   * costs one on-chain read.
+   */
+  async function tryAnalyzeRiskForNewEvidence(submission: EvidenceSubmission): Promise<void> {
+    if (!riskAnalysisService) {
+      return;
+    }
+    const candidates = store
+      .listAttestations()
+      .filter(
+        (attestation) =>
+          attestation.supplier.toLowerCase() === submission.supplier.toLowerCase() &&
+          attestation.policyId === submission.policyId &&
+          !store.getRiskAnalysis(attestation.id),
+      );
+    for (const attestation of candidates) {
+      const proofHash = await attestationReader
+        .getProofHash(BigInt(attestation.id))
+        .catch(() => undefined);
+      if (proofHash === submission.proofHash) {
+        store.markEvidenceAttested(submission.proofHash, attestation.id);
+        await runRiskAnalysis(attestation.id, submission.evidenceText, submission.policyId);
+        return;
+      }
+    }
   }
 
   // Populate the Store from chain history before starting the live watchers
@@ -272,24 +343,11 @@ async function main(): Promise<void> {
           if (!evidenceText) {
             return undefined;
           }
-          store.createPendingRiskAnalysis(attestationId);
-          return riskAnalysisService
-            .analyzeEvidence({ evidenceText, policyId: (attestation.policyId ?? 0n).toString() })
-            .then((result) => {
-              store.updateRiskAnalysisStatus(attestationId, 'complete', result);
-              return result;
-            })
-            .catch((error: unknown) => {
-              // Each provider's raw error (status codes, quota details, model ids) is
-              // already logged as it happens inside RiskAnalysisService — what reaches
-              // the store/UI here must stay a clean, model-agnostic message; never the
-              // raw multi-provider dump `error` carries.
-              console.error('Risk analysis unavailable for attestation', attestationId, error);
-              store.updateRiskAnalysisStatus(attestationId, 'failed', {
-                error: 'AI risk analysis is temporarily unavailable.',
-              });
-              return undefined;
-            });
+          return runRiskAnalysis(
+            attestationId,
+            evidenceText,
+            (attestation.policyId ?? 0n).toString(),
+          );
         },
       );
       riskAnalysisPromises.set(attestationId, riskAnalysisPromise);
@@ -393,6 +451,9 @@ async function main(): Promise<void> {
     attestationRegistryAddress: config.attestationRegistryAddress,
     defaultWalletBlockchain: config.circle?.treasuryBlockchain ?? 'ARC-TESTNET',
     agentControl,
+    onEvidenceSubmitted: (submission) => {
+      void tryAnalyzeRiskForNewEvidence(submission);
+    },
   });
 
   const server = app.listen(config.port, () => {
