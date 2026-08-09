@@ -89,7 +89,7 @@ export function buildTriggerLog(
       entries.push({
         id: `risk-${analysis.attestationId}`,
         timestamp: analysis.updatedAt,
-        message: `AI risk analysis on attestation #${analysis.attestationId}: ${score}/100 (${analysis.provider})`,
+        message: `AI risk analysis on attestation #${analysis.attestationId}: ${score}/100`,
         tone: score >= 70 ? 'attention' : score >= 30 ? 'warning' : 'positive',
       });
     } else if (analysis.status === 'failed') {
