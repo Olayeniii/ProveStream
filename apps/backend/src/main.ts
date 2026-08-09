@@ -152,6 +152,9 @@ async function main(): Promise<void> {
       });
   }
 
+  /** How far past the Store's known attestations to look, on-chain, for a proofHash match — see `tryAnalyzeRiskForNewEvidence`. */
+  const FALLBACK_SCAN_MAX_ATTESTATION_ID = 100;
+
   /**
    * `onAttestation` only fires once, live, when an attestation's own event is
    * first observed — evidence submitted afterwards (a resubmission for
@@ -159,30 +162,51 @@ async function main(): Promise<void> {
    * gets picked up by it, and risk analysis can't be backfilled from chain
    * history alone (evidence text isn't on-chain, only its hash is — see the
    * history-backfill loop below). This bridges that gap: finds an attestation
-   * from the same supplier/policy whose on-chain proofHash matches this
-   * evidence, and — if it hasn't been analyzed yet — runs it now. Bounded by
-   * how many attestations a demo-scale supplier actually has; each candidate
-   * costs one on-chain read.
+   * whose on-chain proofHash matches this evidence, and — if it hasn't been
+   * analyzed yet — runs it now.
+   *
+   * Checks the Store's already-known attestations first (free, no chain
+   * calls). If nothing matches there, falls back to directly probing
+   * attestation ids the Store hasn't backfilled yet — the historical backfill
+   * is incremental and can lag far behind the chain tip for a long time under
+   * RPC rate limiting (`eth_getLogs` is what actually gets rate-limited; each
+   * fallback check here is one cheap `eth_call` instead). A proofHash match on
+   * any id is unambiguous — `AttestationRegistry` enforces global proofHash
+   * uniqueness on-chain, so no supplier/policy check is needed to confirm it.
    */
   async function tryAnalyzeRiskForNewEvidence(submission: EvidenceSubmission): Promise<void> {
     if (!riskAnalysisService) {
       return;
     }
-    const candidates = store
+    const knownIds = new Set(store.listAttestations().map((attestation) => attestation.id));
+    const candidateIds = store
       .listAttestations()
       .filter(
         (attestation) =>
           attestation.supplier.toLowerCase() === submission.supplier.toLowerCase() &&
           attestation.policyId === submission.policyId &&
           !store.getRiskAnalysis(attestation.id),
-      );
-    for (const attestation of candidates) {
-      const proofHash = await attestationReader
-        .getProofHash(BigInt(attestation.id))
-        .catch(() => undefined);
+      )
+      .map((attestation) => attestation.id);
+
+    for (const id of candidateIds) {
+      const proofHash = await attestationReader.getProofHash(BigInt(id)).catch(() => undefined);
       if (proofHash === submission.proofHash) {
-        store.markEvidenceAttested(submission.proofHash, attestation.id);
-        await runRiskAnalysis(attestation.id, submission.evidenceText, submission.policyId);
+        store.markEvidenceAttested(submission.proofHash, id);
+        await runRiskAnalysis(id, submission.evidenceText, submission.policyId);
+        return;
+      }
+    }
+
+    for (let id = 1; id <= FALLBACK_SCAN_MAX_ATTESTATION_ID; id++) {
+      const idString = id.toString();
+      if (knownIds.has(idString)) {
+        continue;
+      }
+      const proofHash = await attestationReader.getProofHash(BigInt(id)).catch(() => undefined);
+      if (proofHash === submission.proofHash) {
+        store.markEvidenceAttested(submission.proofHash, idString);
+        await runRiskAnalysis(idString, submission.evidenceText, submission.policyId);
         return;
       }
     }
