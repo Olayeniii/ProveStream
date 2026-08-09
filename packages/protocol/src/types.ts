@@ -122,7 +122,8 @@ export interface SignatureVerification {
 export interface DestinationWallet {
   supplier: Address;
   chain: string;
-  address: Address;
+  /** Not always a `0x`-prefixed EVM `Address` — Solana destinations use base58. */
+  address: string;
   registeredAt: string;
   /**
    * An x402-gated claim endpoint the supplier exposes. When set, this takes

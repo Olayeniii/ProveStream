@@ -31,3 +31,6 @@ dashboardview.png
 # restart doesn't need to re-scan full history from each contract's
 # deployment block (see apps/backend/src/services/snapshotStore.ts).
 apps/backend/.store-snapshot.json
+
+# Demo video tooling (Remotion) — local-only, not tracked.
+apps/demo-video/

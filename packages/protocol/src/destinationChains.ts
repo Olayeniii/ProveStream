@@ -5,5 +5,9 @@
  * bridge decision, and the frontend's destination-wallet form, so they can
  * never disagree about what's supported.
  */
-export const SUPPORTED_DESTINATION_CHAINS = ['Ethereum_Sepolia'] as const;
+export const SUPPORTED_DESTINATION_CHAINS = [
+  'Ethereum_Sepolia',
+  'Base_Sepolia',
+  'Solana_Devnet',
+] as const;
 export type SupportedDestinationChain = (typeof SUPPORTED_DESTINATION_CHAINS)[number];

@@ -1,4 +1,5 @@
 import { AppKit, BridgeChain } from '@circle-fin/app-kit';
+import type { SupportedDestinationChain } from '@provenance-streams/protocol';
 import type { Address, Hex } from 'viem';
 import { formatUnits } from 'viem';
 import { createCircleWalletsAdapter } from '@circle-fin/adapter-circle-wallets';
@@ -7,11 +8,19 @@ import { createViemAdapterFromPrivateKey } from '@circle-fin/adapter-viem-v2';
 import type { TreasuryConfig } from '../config.js';
 import type { TreasuryService } from './treasuryService.js';
 
+/** Maps this project's own chain-name constants to App Kit's real `BridgeChain` enum — verified against the installed package's own `.d.ts`, not assumed. */
+const DESTINATION_TO_BRIDGE_CHAIN: Record<SupportedDestinationChain, BridgeChain> = {
+  Ethereum_Sepolia: BridgeChain.Ethereum_Sepolia,
+  Base_Sepolia: BridgeChain.Base_Sepolia,
+  Solana_Devnet: BridgeChain.Solana_Devnet,
+};
+
 export interface BridgeInput {
   /** Amount in the smallest unit of the native token (18 decimals on Arc), same convention as `SendRewardInput`. */
   amount: bigint;
-  /** The supplier's registered destination address on `destinationChain`. */
-  recipientAddress: Address;
+  destinationChain: SupportedDestinationChain;
+  /** The supplier's registered destination address on `destinationChain` — not always `0x`-prefixed (e.g. Solana's base58). */
+  recipientAddress: string;
 }
 
 export type BridgeResult =
@@ -50,7 +59,7 @@ export class BridgeService {
           address: this.sourceAddress,
         },
         to: {
-          chain: BridgeChain.Ethereum_Sepolia,
+          chain: DESTINATION_TO_BRIDGE_CHAIN[input.destinationChain],
           recipientAddress: input.recipientAddress,
           useForwarder: true,
         },

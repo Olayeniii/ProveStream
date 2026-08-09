@@ -284,7 +284,8 @@ export class Store {
   registerDestinationWallet(input: {
     supplier: Address;
     chain: string;
-    address: Address;
+    /** Not always `0x`-prefixed — Solana destinations use base58. */
+    address: string;
     x402ClaimUrl?: string | undefined;
   }): DestinationWallet {
     const record: DestinationWallet = {

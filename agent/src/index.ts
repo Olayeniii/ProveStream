@@ -1,8 +1,10 @@
 import type { Address, Hex } from 'viem';
 
+import { SUPPORTED_DESTINATION_CHAINS } from '@provenance-streams/protocol';
 import type {
   AttestationSubmittedEventArgs,
   RewardEligibleEventArgs,
+  SupportedDestinationChain,
 } from '@provenance-streams/protocol';
 
 import { createAgentPublicClient } from './chainClient.js';
@@ -72,7 +74,8 @@ export interface RewardEligibleContext {
 
 export interface DestinationWalletLookup {
   chain: string;
-  address: Address;
+  /** Not always `0x`-prefixed — Solana destinations use base58. */
+  address: string;
   /** When set, takes priority over `chain`/`address` — see `X402Service`. */
   x402ClaimUrl?: string | undefined;
 }
@@ -288,9 +291,15 @@ export function runAgent(configInput: AgentConfigInput, hooks: RunAgentHooks = {
         }
 
         if (destination) {
+          if (!SUPPORTED_DESTINATION_CHAINS.includes(destination.chain as SupportedDestinationChain)) {
+            throw new Error(
+              `Unsupported destination chain "${destination.chain}" for reward ${rewardId.toString()}.`,
+            );
+          }
           const bridgeService = await bridgeServicePromise;
           const result = await bridgeService.bridgeToDestination({
             amount: rewardAmount,
+            destinationChain: destination.chain as SupportedDestinationChain,
             recipientAddress: destination.address,
           });
           if (result.status === 'failed') {
