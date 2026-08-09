@@ -185,9 +185,23 @@ export class WalletService {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       const transaction = await this.client.getTransaction({ id: transactionId, userToken });
-      const txHash = transaction.data?.transaction?.txHash;
+      const record = transaction.data?.transaction;
+      const txHash = record?.txHash;
       if (txHash) {
         return txHash;
+      }
+      // Circle stops estimating/broadcasting once a transaction lands in one
+      // of these terminal states — polling further would just wait out the
+      // full timeout for a hash that will never arrive. Surface the real
+      // reason (e.g. a contract revert caught during gas estimation) instead
+      // of a generic timeout that reads as "still processing."
+      if (
+        record?.state === 'FAILED' ||
+        record?.state === 'DENIED' ||
+        record?.state === 'CANCELLED'
+      ) {
+        const detail = record.errorDetails ?? record.errorReason ?? record.state;
+        throw new Error(`Transaction ${record.state.toLowerCase()}: ${detail}`);
       }
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
