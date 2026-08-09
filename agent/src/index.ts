@@ -5,6 +5,7 @@ import type {
   RewardEligibleEventArgs,
 } from '@provenance-streams/protocol';
 
+import { createAgentPublicClient } from './chainClient.js';
 import { type AgentConfigInput, parseAgentConfig } from './config.js';
 import { dispatchRewardOnChain, watchRewardEligible } from './dispatcher.js';
 import { createLogger } from './logger.js';
@@ -15,6 +16,7 @@ import { FraudService } from './services/fraudService.js';
 import type { JobState } from './services/settlementQueue.js';
 import { SettlementQueue } from './services/settlementQueue.js';
 import { createTreasuryService } from './services/treasuryService.js';
+import { X402Service } from './services/x402Service.js';
 import type { AttestationSubmittedContext } from './watcher.js';
 import { watchAttestations } from './watcher.js';
 
@@ -32,6 +34,8 @@ export type {
 export { createTreasuryService } from './services/treasuryService.js';
 export type { BridgeInput, BridgeResult } from './services/bridgeService.js';
 export { BridgeService, createBridgeService } from './services/bridgeService.js';
+export type { X402ClaimInput, X402ClaimResult } from './services/x402Service.js';
+export { X402Service } from './services/x402Service.js';
 export type { FraudCheckInput, FraudCheckResult, FraudSignal } from './services/fraudService.js';
 export { FraudService } from './services/fraudService.js';
 export type { JobState, SettlementJob } from './services/settlementQueue.js';
@@ -69,6 +73,8 @@ export interface RewardEligibleContext {
 export interface DestinationWalletLookup {
   chain: string;
   address: Address;
+  /** When set, takes priority over `chain`/`address` — see `X402Service`. */
+  x402ClaimUrl?: string | undefined;
 }
 
 export interface RunAgentHooks {
@@ -155,6 +161,7 @@ export function runAgent(configInput: AgentConfigInput, hooks: RunAgentHooks = {
   const config = parseAgentConfig(configInput);
   const treasuryService = createTreasuryService(config, config.treasury);
   const bridgeServicePromise = createBridgeService(config.treasury, treasuryService);
+  const x402Service = new X402Service(treasuryService, createAgentPublicClient(config));
   const fraudService = new FraudService(
     config.fraudScoreThreshold !== undefined ? { scoreThreshold: config.fraudScoreThreshold } : {},
   );
@@ -244,17 +251,41 @@ export function runAgent(configInput: AgentConfigInput, hooks: RunAgentHooks = {
   });
 
   /**
-   * Enqueues the actual settlement (same-chain treasury payment, or a
-   * cross-chain bridge if the supplier registered a destination wallet) onto
-   * the single-worker retrying queue. Shared by the automatic `RewardEligible`
-   * path and `approvePayout` (manual settlement of a previously fraud-flagged
-   * payout) so both go through identical logic.
+   * Enqueues the actual settlement onto the single-worker retrying queue, in
+   * priority order: an x402 claim endpoint (`X402Service`, via Circle
+   * Gateway), else a registered cross-chain destination (`BridgeService`),
+   * else a same-chain treasury payment. Shared by the automatic
+   * `RewardEligible` path and `approvePayout` (manual settlement of a
+   * previously fraud-flagged payout) so both go through identical logic.
    */
   function enqueueSettlement(rewardId: bigint, supplier: Address, rewardAmount: bigint): void {
     settlementQueue.enqueue({
       id: rewardId.toString(),
       execute: async () => {
         const destination = await hooks.getDestinationWallet?.(supplier);
+
+        if (destination?.x402ClaimUrl) {
+          // Native USDC is 18-decimal on Arc; the x402/Gateway leg settles
+          // through Arc's 6-decimal ERC-20 interface over the same balance.
+          const amount6Decimals = rewardAmount / 1_000_000_000_000n;
+          const result = await x402Service.claim({
+            claimUrl: destination.x402ClaimUrl,
+            rewardId: rewardId.toString(),
+            supplier,
+            amount: amount6Decimals,
+          });
+          if (result.status === 'failed') {
+            throw new Error(result.error);
+          }
+          logger.info('Reward settled via x402 claim endpoint', {
+            rewardId: rewardId.toString(),
+            claimUrl: destination.x402ClaimUrl,
+            txHash: result.txHash,
+          });
+          fraudService.recordPayout(supplier);
+          hooks.onPaymentSettled?.(rewardId, { txHash: result.txHash });
+          return;
+        }
 
         if (destination) {
           const bridgeService = await bridgeServicePromise;

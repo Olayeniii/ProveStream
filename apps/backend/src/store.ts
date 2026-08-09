@@ -287,7 +287,13 @@ export class Store {
     address: Address;
     x402ClaimUrl?: string | undefined;
   }): DestinationWallet {
-    const record: DestinationWallet = { ...input, registeredAt: new Date().toISOString() };
+    const record: DestinationWallet = {
+      supplier: input.supplier,
+      chain: input.chain,
+      address: input.address,
+      registeredAt: new Date().toISOString(),
+      ...(input.x402ClaimUrl !== undefined ? { x402ClaimUrl: input.x402ClaimUrl } : {}),
+    };
     this.destinationWallets.set(input.supplier, record);
     return record;
   }

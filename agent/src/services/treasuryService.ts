@@ -30,9 +30,17 @@ export interface SendRewardResult {
  * API expects exactly this as a JSON string. `LocalTreasuryService` strips
  * it back out before handing the rest to viem, which infers the domain type
  * itself and rejects an explicit `EIP712Domain` entry.
+ *
+ * `chainId`/`verifyingContract` are optional: Circle Gateway's `GatewayWallet`
+ * deliberately omits both from its domain (verified on-chain against the real
+ * contract's `domainSeparator()`) so a signature is valid across every domain
+ * it supports, not tied to one chain/contract — unlike the plain EIP-3009
+ * `transferWithAuthorization` domain, which needs both. Callers must omit the
+ * keys entirely (not set them to `undefined`) when the domain doesn't use them,
+ * so `EIP712Domain`'s type entry and the actual signed struct hash agree.
  */
 export interface TypedDataInput {
-  domain: { name: string; version: string; chainId: number; verifyingContract: Address };
+  domain: { name: string; version: string; chainId?: number; verifyingContract?: Address };
   types: Record<string, { name: string; type: string }[]>;
   primaryType: string;
   message: Record<string, unknown>;
@@ -121,7 +129,7 @@ class CircleTreasuryService implements TreasuryService {
     const walletAddress = await this.getAddress();
     const response = await this.client.signTypedData({
       walletAddress,
-      blockchain: this.config.blockchain as TokenBlockchain,
+      blockchain: this.config.blockchain,
       data: JSON.stringify(input),
     });
     const signature = response.data?.signature;
@@ -166,7 +174,8 @@ class LocalTreasuryService implements TreasuryService {
 
   /** `EIP712Domain` is dropped from `types` — viem infers it from `domain` and rejects an explicit entry. */
   signTypedData({ domain, types, primaryType, message }: TypedDataInput): Promise<Hex> {
-    const { EIP712Domain: _domainType, ...remainingTypes } = types;
+    const remainingTypes = { ...types };
+    delete remainingTypes.EIP712Domain;
     return this.walletClient.signTypedData({
       account: this.walletClient.account,
       domain,

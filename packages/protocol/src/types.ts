@@ -126,8 +126,9 @@ export interface DestinationWallet {
   registeredAt: string;
   /**
    * An x402-gated claim endpoint the supplier exposes. When set, this takes
-   * priority over `chain`/`address` — the agent pays it directly in Arc USDC
-   * via a signed EIP-3009 authorization instead of bridging.
+   * priority over `chain`/`address` — the agent settles it via Circle
+   * Gateway (a signed `BurnIntent`, attested by Circle, then minted by the
+   * endpoint itself) instead of bridging or a same-chain push transfer.
    */
   x402ClaimUrl?: string;
 }

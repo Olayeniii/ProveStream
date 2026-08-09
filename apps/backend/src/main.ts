@@ -375,7 +375,11 @@ async function main(): Promise<void> {
     },
     getDestinationWallet: (supplier) => {
       const record = store.getDestinationWallet(supplier);
-      return Promise.resolve(record ? { chain: record.chain, address: record.address } : undefined);
+      return Promise.resolve(
+        record
+          ? { chain: record.chain, address: record.address, x402ClaimUrl: record.x402ClaimUrl }
+          : undefined,
+      );
     },
   });
 
