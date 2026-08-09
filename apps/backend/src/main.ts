@@ -175,6 +175,10 @@ async function main(): Promise<void> {
    * uniqueness on-chain, so no supplier/policy check is needed to confirm it.
    */
   async function tryAnalyzeRiskForNewEvidence(submission: EvidenceSubmission): Promise<void> {
+    console.log('DIAG: tryAnalyzeRiskForNewEvidence called', {
+      proofHash: submission.proofHash,
+      hasService: Boolean(riskAnalysisService),
+    });
     if (!riskAnalysisService) {
       return;
     }
