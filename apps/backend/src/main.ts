@@ -385,6 +385,7 @@ async function main(): Promise<void> {
 
   const app = createServer({
     corsOrigin: config.corsOrigin,
+    adminToken: config.adminToken,
     store,
     treasuryService,
     policyService,

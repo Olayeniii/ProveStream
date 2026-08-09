@@ -69,7 +69,44 @@ function settlementJobLabel(job: SettlementJobRecord, payments: Payment[]): stri
   return JOB_STATE_LABEL[job.state];
 }
 
+/** Not a long-lived credential — cleared on tab close, unlike `localStorage`. */
+const ADMIN_TOKEN_STORAGE_KEY = 'adminToken';
+
 export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
+  const [adminToken, setAdminToken] = useState<string | undefined>(
+    () => sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) ?? undefined,
+  );
+  const [loginValue, setLoginValue] = useState('');
+  const [loginError, setLoginError] = useState<string | undefined>(undefined);
+  const [loggingIn, setLoggingIn] = useState(false);
+
+  const handleLogin = () => {
+    if (!loginValue.trim()) {
+      return;
+    }
+    setLoginError(undefined);
+    setLoggingIn(true);
+    api
+      .adminLogin(loginValue)
+      .then((result) => {
+        if (!result.ok) {
+          setLoginError('Incorrect admin token.');
+          return;
+        }
+        sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, loginValue);
+        setAdminToken(loginValue);
+      })
+      .catch((error: unknown) =>
+        setLoginError(error instanceof Error ? error.message : 'Failed to sign in.'),
+      )
+      .finally(() => setLoggingIn(false));
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+    setAdminToken(undefined);
+  };
+
   const [attestations, setAttestations] = useState<AttestationRecord[]>([]);
   const [health, setHealth] = useState<HealthState>({ backend: 'checking', treasury: 'checking' });
   const [agentHealth, setAgentHealth] = useState<AgentHealth | undefined>(undefined);
@@ -82,20 +119,23 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
   const [alertActionError, setAlertActionError] = useState<string | undefined>(undefined);
 
   const refresh = useCallback(() => {
+    if (!adminToken) {
+      return;
+    }
     api
       .listAttestations()
       .then(setAttestations)
       .catch(() => undefined);
     api
-      .getAgentHealth()
+      .getAgentHealth(adminToken)
       .then(setAgentHealth)
       .catch(() => undefined);
     api
-      .listSettlementQueue()
+      .listSettlementQueue(adminToken)
       .then(setSettlementQueue)
       .catch(() => undefined);
     api
-      .listFraudAlerts()
+      .listFraudAlerts(adminToken)
       .then(setFraudAlerts)
       .catch(() => undefined);
     api
@@ -114,7 +154,7 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
       .listEvidenceSubmissions()
       .then(setEvidenceSubmissions)
       .catch(() => undefined);
-  }, [api]);
+  }, [api, adminToken]);
 
   const triggerLog = useMemo(
     () =>
@@ -145,6 +185,9 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
   }, [refresh]);
 
   useEffect(() => {
+    if (!adminToken) {
+      return;
+    }
     api
       .getHealth()
       .then(() => setHealth((current) => ({ ...current, backend: 'ok' })))
@@ -154,7 +197,7 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
       .getTreasuryBalance()
       .then(() => setHealth((current) => ({ ...current, treasury: 'ok' })))
       .catch(() => setHealth((current) => ({ ...current, treasury: 'error' })));
-  }, [api]);
+  }, [api, adminToken]);
 
   const auditors = useMemo(() => {
     const counts = new Map<string, number>();
@@ -171,13 +214,51 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
   );
 
   const handleAlertAction = (rewardId: string, action: 'approve' | 'reject') => {
+    if (!adminToken) {
+      return;
+    }
     setAlertActionError(undefined);
     const call =
-      action === 'approve' ? api.approveFraudAlert(rewardId) : api.rejectFraudAlert(rewardId);
+      action === 'approve'
+        ? api.approveFraudAlert(rewardId, adminToken)
+        : api.rejectFraudAlert(rewardId, adminToken);
     call.then(refresh).catch((error: unknown) => {
       setAlertActionError(error instanceof Error ? error.message : `Failed to ${action} payout.`);
     });
   };
+
+  if (!adminToken) {
+    return (
+      <AppShell
+        title="Admin"
+        subtitle="System health, settlement queue, and fraud review"
+        env={env}
+        api={api}
+      >
+        <Card>
+          <SectionTitle>Sign in</SectionTitle>
+          <LoginRow>
+            <LoginInput
+              type="password"
+              placeholder="Admin token"
+              value={loginValue}
+              onChange={(event) => setLoginValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  handleLogin();
+                }
+              }}
+              disabled={loggingIn}
+            />
+            <LoginButton onClick={handleLogin} disabled={loggingIn}>
+              {loggingIn ? 'Signing in…' : 'Sign in'}
+            </LoginButton>
+          </LoginRow>
+          {loginError && <ErrorText>{loginError}</ErrorText>}
+        </Card>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell
@@ -185,6 +266,7 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
       subtitle="System health, settlement queue, and fraud review"
       env={env}
       api={api}
+      headerActions={<SignOutButton onClick={handleLogout}>Sign out</SignOutButton>}
     >
       <Card>
         <SectionTitle>Health</SectionTitle>
@@ -500,4 +582,60 @@ const StatusLabel = styled.span<{ $status: FraudAlert['status'] }>`
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: ${(props) => getToneColor(props.theme, FRAUD_ALERT_STATUS_TONE[props.$status]).text};
+`;
+
+const LoginRow = styled.div`
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+`;
+
+const LoginInput = styled.input`
+  flex: 1;
+  min-width: 200px;
+  padding: 10px 12px;
+  border-radius: ${(props) => props.theme.radius.card};
+  border: 1px solid ${(props) => props.theme.colors.border};
+  background: ${(props) => props.theme.colors.surfaceMuted};
+  color: ${(props) => props.theme.colors.text};
+  font-size: 0.9rem;
+
+  &:disabled {
+    opacity: 0.6;
+  }
+`;
+
+const LoginButton = styled.button`
+  padding: 10px 16px;
+  border-radius: ${(props) => props.theme.radius.pill};
+  border: none;
+  background: ${(props) => props.theme.colors.primary};
+  color: ${(props) => props.theme.colors.primaryText};
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 160ms ease-out;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+`;
+
+const SignOutButton = styled.button`
+  padding: 6px 14px;
+  border-radius: ${(props) => props.theme.radius.pill};
+  border: 1px solid ${(props) => props.theme.colors.border};
+  background: transparent;
+  color: ${(props) => props.theme.colors.textMuted};
+  font-size: 0.8rem;
+  cursor: pointer;
+
+  &:hover {
+    color: ${(props) => props.theme.colors.text};
+  }
 `;

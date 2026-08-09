@@ -3,7 +3,7 @@ import { validateDestinationWallet } from '@provenance-streams/agent';
 import { isAddress, isHex } from 'viem';
 import cors from 'cors';
 import express from 'express';
-import type { Express } from 'express';
+import type { Express, RequestHandler } from 'express';
 import { z } from 'zod';
 
 import type { PolicyService } from './services/policyService.js';
@@ -19,7 +19,16 @@ export interface ServerDependencies {
   defaultWalletBlockchain: string;
   attestationRegistryAddress: string;
   agentControl: AgentControl;
+  /**
+   * A shared secret gating every admin route (see docs/decisions.md). Deliberately
+   * a single token, not session/JWT machinery — the goal is closing a real,
+   * exploitable hole (AdminDashboard had zero auth) by the deadline, not building
+   * full RBAC. The long-term fix is identity-backed, tied to a real wallet session.
+   */
+  adminToken: string;
 }
+
+const adminLoginBodySchema = z.object({ token: z.string().min(1) });
 
 const createSessionBodySchema = z.object({ userId: z.string().min(1) });
 const createWalletChallengeBodySchema = z.object({ userToken: z.string().min(1) });
@@ -55,8 +64,27 @@ export function createServer(deps: ServerDependencies): Express {
   app.use(cors({ origin: deps.corsOrigin }));
   app.use(express.json());
 
+  /** Gates every admin route — reads too, not just the mutating ones, so the underlying data isn't public either. */
+  const requireAdminToken: RequestHandler = (req, res, next) => {
+    const submitted = req.header('X-Admin-Token');
+    if (!submitted || submitted !== deps.adminToken) {
+      res.status(401).json({ error: 'Missing or invalid admin token.' });
+      return;
+    }
+    next();
+  };
+
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok' });
+  });
+
+  app.post('/api/admin/login', (req, res) => {
+    const body = adminLoginBodySchema.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: 'A token is required.' });
+      return;
+    }
+    res.json({ ok: body.data.token === deps.adminToken });
   });
 
   app.get('/api/treasury', (_req, res, next) => {
@@ -190,6 +218,10 @@ export function createServer(deps: ServerDependencies): Express {
     }
     res.json(record);
   });
+
+  app.use('/api/fraud-alerts', requireAdminToken);
+  app.use('/api/agent-health', requireAdminToken);
+  app.use('/api/settlement-queue', requireAdminToken);
 
   app.get('/api/fraud-alerts', (_req, res) => {
     res.json(deps.store.listFraudAlerts());

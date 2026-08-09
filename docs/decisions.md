@@ -221,3 +221,41 @@ than import the whole `agent` package into the browser bundle (which would
 pull in Node-only Circle SDK dependencies), the constant moved to
 `packages/protocol` — already a dependency of all three apps — and `agent`
 re-exports it for backward compatibility with existing imports.
+
+## Post-Milestone-3: Trigger Log, evidence submission, x402 payouts
+
+### x402 payouts settle through Circle Gateway's `BurnIntent`, not plain EIP-3009
+
+The first pass assumed a supplier's x402 claim endpoint could be paid with a
+direct, self-facilitated `transferWithAuthorization` (EIP-3009) signed
+against Arc's USDC ERC-20 interface — no third party involved. Once Circle
+Gateway entered the picture as the intended rail, its real contracts
+(cloned from `github.com/circlefin/evm-gateway-contracts` and checked
+against Arc testnet live) turned out to sign a much richer `BurnIntent` /
+`TransferSpec` struct instead, with `gatewayBurn` restricted to a
+Circle-registered operator and `gatewayMint` requiring an attestation only
+Circle's own Gateway API can produce — not something a supplier's own
+server can self-verify the way a raw ECDSA signature check would be.
+`X402Service` therefore does two real network calls per claim: sign the
+`BurnIntent` with the treasury key, POST it to
+`gateway-api-testnet.circle.com/v1/transfer` for the attestation, then hand
+that attestation to the supplier's endpoint as x402 payment proof — the
+endpoint calls `gatewayMint` itself and pays its own gas, preserving the
+original "supplier self-facilitates settlement" design even though the
+underlying mechanism changed. Every contract address, the EIP-712 domain
+(`name: "GatewayWallet", version: "1"`, deliberately omitting
+`chainId`/`verifyingContract` so one signature is valid across every domain
+Gateway supports), and the domain's own type hash were independently
+reproduced and checked against a live `domainSeparator()` call on Arc
+testnet before being hardcoded — not assumed from documentation or a
+third-party summary.
+
+### The Gateway deposit step is a manual script, not part of the agent's runtime
+
+`GatewayWallet` only lets an operator burn from a depositor's _existing_
+balance — there's no path from "reward becomes eligible" to "funds exist in
+Gateway" without a prior on-chain deposit. Since funding is an occasional
+treasury-management action, not something that should happen automatically
+on every settlement, `agent/scripts/depositToGateway.ts` is a standalone
+script (same category as `scripts/deploy.ts`), not a hook the runtime agent
+calls itself.

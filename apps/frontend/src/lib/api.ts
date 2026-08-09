@@ -58,6 +58,10 @@ async function request<T>(baseUrl: string, path: string, init?: RequestInit): Pr
   return response.json() as Promise<T>;
 }
 
+function adminHeaders(adminToken: string): RequestInit {
+  return { headers: { 'X-Admin-Token': adminToken } };
+}
+
 /** Like `request`, but resolves to `undefined` on a 404 instead of throwing (e.g. "no destination wallet registered yet"). */
 async function requestOptional<T>(baseUrl: string, path: string): Promise<T | undefined> {
   const response = await fetch(`${baseUrl}${path}`);
@@ -100,14 +104,29 @@ export function createApiClient(baseUrl: string) {
     getDestinationWallet: (supplier: string) =>
       requestOptional<DestinationWallet>(baseUrl, `/api/destination-wallet/${supplier}`),
 
-    listFraudAlerts: () => request<FraudAlert[]>(baseUrl, '/api/fraud-alerts'),
-    approveFraudAlert: (rewardId: string) =>
-      request<{ ok: true }>(baseUrl, `/api/fraud-alerts/${rewardId}/approve`, { method: 'POST' }),
-    rejectFraudAlert: (rewardId: string) =>
-      request<{ ok: true }>(baseUrl, `/api/fraud-alerts/${rewardId}/reject`, { method: 'POST' }),
+    adminLogin: (token: string) =>
+      request<{ ok: boolean }>(baseUrl, '/api/admin/login', {
+        method: 'POST',
+        body: JSON.stringify({ token }),
+      }),
 
-    listSettlementQueue: () => request<SettlementJobRecord[]>(baseUrl, '/api/settlement-queue'),
-    getAgentHealth: () => request<AgentHealth>(baseUrl, '/api/agent-health'),
+    listFraudAlerts: (adminToken: string) =>
+      request<FraudAlert[]>(baseUrl, '/api/fraud-alerts', adminHeaders(adminToken)),
+    approveFraudAlert: (rewardId: string, adminToken: string) =>
+      request<{ ok: true }>(baseUrl, `/api/fraud-alerts/${rewardId}/approve`, {
+        method: 'POST',
+        ...adminHeaders(adminToken),
+      }),
+    rejectFraudAlert: (rewardId: string, adminToken: string) =>
+      request<{ ok: true }>(baseUrl, `/api/fraud-alerts/${rewardId}/reject`, {
+        method: 'POST',
+        ...adminHeaders(adminToken),
+      }),
+
+    listSettlementQueue: (adminToken: string) =>
+      request<SettlementJobRecord[]>(baseUrl, '/api/settlement-queue', adminHeaders(adminToken)),
+    getAgentHealth: (adminToken: string) =>
+      request<AgentHealth>(baseUrl, '/api/agent-health', adminHeaders(adminToken)),
 
     createEvidenceSubmission: (input: {
       supplier: string;

@@ -27,6 +27,8 @@ const serverConfigSchema = z.object({
   rewardDispatcherAddress: addressSchema,
   operatorPrivateKey: z.string().min(1),
   treasuryPrivateKey: z.string().optional(),
+  /** Shared secret gating every admin route (see docs/decisions.md) — required, no default, so the server refuses to boot without one rather than silently running unauthenticated. */
+  adminToken: z.string().min(1),
   circle: circleSchema.partial(),
   geminiApiKey: z.string().optional(),
   geminiModel: z.string().min(1).default('gemini-2.0-flash'),
@@ -42,6 +44,7 @@ const serverConfigSchema = z.object({
 export interface ServerConfig {
   port: number;
   corsOrigin: string;
+  adminToken: string;
   rpcUrl: string;
   chainId: number;
   attestationRegistryAddress: `0x${string}`;
@@ -94,6 +97,7 @@ export function loadServerConfig(): ServerConfig {
     rewardDispatcherAddress: process.env.REWARD_DISPATCHER_ADDRESS,
     operatorPrivateKey: process.env.OPERATOR_PRIVATE_KEY,
     treasuryPrivateKey: process.env.TREASURY_PRIVATE_KEY,
+    adminToken: process.env.ADMIN_TOKEN,
     circle: {
       apiKey: process.env.CIRCLE_API_KEY,
       entitySecret: process.env.CIRCLE_ENTITY_SECRET,
@@ -130,6 +134,7 @@ export function loadServerConfig(): ServerConfig {
   return {
     port: raw.port,
     corsOrigin: raw.corsOrigin,
+    adminToken: raw.adminToken,
     rpcUrl: raw.rpcUrl,
     chainId: raw.chainId,
     attestationRegistryAddress: raw.attestationRegistryAddress,
