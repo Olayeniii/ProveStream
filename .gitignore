@@ -35,3 +35,12 @@ apps/backend/.store-snapshot.json
 # Demo video tooling (Remotion) — standalone, not an npm workspace member,
 # local-only, not tracked.
 /demo-video/
+
+# circom/snarkjs build output (compiled circuit, trusted-setup files, test
+# witnesses/proofs) — regeneratable from circuits/thresholdCheck.circom via
+# `circom` + `snarkjs`, same reasoning as artifacts/ above. Note:
+# thresholdCheck_final.zkey specifically is the actual proving key matching
+# the verifier already deployed on Arc testnet — regenerating the trusted
+# setup produces a different zkey that won't match that deployment, so keep
+# a copy of it somewhere safe before deleting this directory.
+circuits/build/
