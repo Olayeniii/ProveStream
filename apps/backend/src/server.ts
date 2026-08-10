@@ -1,6 +1,6 @@
 import type { AgentControl, TreasuryService } from '@provenance-streams/agent';
 import { validateDestinationWallet } from '@provenance-streams/agent';
-import type { EvidenceSubmission } from '@provenance-streams/protocol';
+import type { EvidenceSubmission, EvidenceSubmissionStatus } from '@provenance-streams/protocol';
 import { isAddress, isHex } from 'viem';
 import cors from 'cors';
 import express from 'express';
@@ -33,6 +33,10 @@ export interface ServerDependencies {
    * `tryAnalyzeRiskForNewEvidence`), since `onAttestation` only ever fires once.
    */
   onEvidenceSubmitted?: (submission: EvidenceSubmission) => void;
+}
+
+function isEvidenceSubmissionStatus(value: unknown): value is EvidenceSubmissionStatus {
+  return value === 'pending' || value === 'attested' || value === 'rejected';
 }
 
 const adminLoginBodySchema = z.object({ token: z.string().min(1) });
@@ -149,12 +153,7 @@ export function createServer(deps: ServerDependencies): Express {
 
   app.get('/api/evidence-submissions', (req, res) => {
     const status = req.query.status;
-    if (
-      status !== undefined &&
-      status !== 'pending' &&
-      status !== 'attested' &&
-      status !== 'rejected'
-    ) {
+    if (status !== undefined && !isEvidenceSubmissionStatus(status)) {
       res.status(400).json({ error: 'status must be pending, attested, or rejected' });
       return;
     }

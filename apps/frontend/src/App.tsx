@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useMemo } from 'react';
 import { Route, HashRouter as Router, Routes } from 'react-router-dom';
 import styled, { ThemeProvider } from 'styled-components';
 
@@ -41,7 +41,10 @@ const NotFoundPage = lazy(() =>
 
 export function App() {
   const env = loadEnv();
-  const api = createApiClient(env.backendUrl);
+  // Stable reference: without this, a new client is created on every render,
+  // and pages whose effects depend on `api` (e.g. StreamsOverview's one-shot
+  // policy/attestation fetch) re-fire repeatedly, racing themselves.
+  const api = useMemo(() => createApiClient(env.backendUrl), [env.backendUrl]);
 
   return (
     <ThemeProvider theme={theme}>
