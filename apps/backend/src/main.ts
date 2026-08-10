@@ -481,7 +481,7 @@ async function main(): Promise<void> {
   });
 
   const server = app.listen(config.port, () => {
-    console.log(`Backend API listening on http://localhost:${config.port.toString()}`);
+    console.log(`Backend API listening on port ${config.port.toString()}`);
     if (!config.embeddedWallet) {
       console.log(
         'Embedded wallets are disabled: set CIRCLE_API_KEY / CIRCLE_APP_ID to enable them.',
