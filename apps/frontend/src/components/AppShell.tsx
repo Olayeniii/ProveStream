@@ -6,10 +6,12 @@ import {
   ChevronDown,
   FileText,
   Landmark,
+  Menu,
   ShieldCheck,
   Settings,
   Truck,
   Wallet,
+  X,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
@@ -62,6 +64,7 @@ export function AppShell({
   const [totalRewardsPaid, setTotalRewardsPaid] = useState<string | undefined>(undefined);
   const [streamCount, setStreamCount] = useState<number | undefined>(undefined);
   const [treasuryLabel, setTreasuryLabel] = useState<string | undefined>(undefined);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     api
@@ -148,12 +151,49 @@ export function AppShell({
         </Footer>
       </Sidebar>
 
+      {mobileNavOpen && (
+        <MobileNavOverlay onClick={() => setMobileNavOpen(false)}>
+          <MobileNavPanel onClick={(event) => event.stopPropagation()}>
+            <MobileNavHeader>
+              <Brand>
+                <Logo src={logo} alt="Provenance Streams" />
+                <BrandText>Provenance Streams</BrandText>
+              </Brand>
+              <CloseButton
+                type="button"
+                aria-label="Close menu"
+                onClick={() => setMobileNavOpen(false)}
+              >
+                <X size={20} />
+              </CloseButton>
+            </MobileNavHeader>
+            <Nav>
+              {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+                <StyledNavLink key={to} to={to} onClick={() => setMobileNavOpen(false)}>
+                  <Icon size={18} strokeWidth={2} />
+                  {label}
+                </StyledNavLink>
+              ))}
+            </Nav>
+          </MobileNavPanel>
+        </MobileNavOverlay>
+      )}
+
       <Main>
         <Header>
-          <div>
-            <Title>{title}</Title>
-            {subtitle && <Subtitle>{subtitle}</Subtitle>}
-          </div>
+          <HeaderStart>
+            <MenuButton
+              type="button"
+              aria-label="Open menu"
+              onClick={() => setMobileNavOpen(true)}
+            >
+              <Menu size={20} />
+            </MenuButton>
+            <div>
+              <Title>{title}</Title>
+              {subtitle && <Subtitle>{subtitle}</Subtitle>}
+            </div>
+          </HeaderStart>
           <HeaderActions>
             <NetworkChip>
               {networkLabel(env.chainId)}
@@ -330,6 +370,70 @@ const Header = styled.header`
   padding: 24px 32px;
   border-bottom: 1px solid ${(props) => props.theme.colors.border};
   flex-wrap: wrap;
+`;
+
+const HeaderStart = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+`;
+
+/** Only shown below the same 900px breakpoint Sidebar disappears at — this is
+ * the sidebar's mobile replacement, not a decorative extra. */
+const MenuButton = styled.button`
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid ${(props) => props.theme.colors.border};
+  background: ${(props) => props.theme.colors.surface};
+  color: ${(props) => props.theme.colors.text};
+  cursor: pointer;
+
+  @media (max-width: 900px) {
+    display: flex;
+  }
+`;
+
+const MobileNavOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(15, 23, 42, 0.4);
+`;
+
+const MobileNavPanel = styled.div`
+  width: 260px;
+  max-width: 80vw;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 16px;
+  background: ${(props) => props.theme.colors.surface};
+  overflow-y: auto;
+`;
+
+const MobileNavHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+`;
+
+const CloseButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: none;
+  background: ${(props) => props.theme.colors.surfaceMuted};
+  color: ${(props) => props.theme.colors.textMuted};
+  cursor: pointer;
 `;
 
 const Title = styled.h1`
