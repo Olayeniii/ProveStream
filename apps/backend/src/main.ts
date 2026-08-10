@@ -445,7 +445,7 @@ async function main(): Promise<void> {
         policyId: payment.policyId,
         rewardAmount: payment.rewardAmount,
         score: result.score,
-        reasons: [`AI risk analysis (${result.provider}): ${result.summary}`],
+        reasons: [`AI risk analysis: ${result.summary}`],
       });
       return true;
     },
