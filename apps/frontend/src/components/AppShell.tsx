@@ -144,9 +144,9 @@ export function AppShell({
 
         <Footer>
           Powered by
-          <CircleLogo
-            src="https://cdn.prod.website-files.com/67116d0daddc92483c812e88/67116d0daddc92483c812f72_Circle%20Logo.avif"
-            alt="Circle"
+          <ArcLogo
+            src="https://cdn.prod.website-files.com/685311a976e7c248b5dfde95/688f6e47d217527a8db50637_logo.webp"
+            alt="Arc"
           />
         </Footer>
       </Sidebar>
@@ -182,11 +182,7 @@ export function AppShell({
       <Main>
         <Header>
           <HeaderStart>
-            <MenuButton
-              type="button"
-              aria-label="Open menu"
-              onClick={() => setMobileNavOpen(true)}
-            >
+            <MenuButton type="button" aria-label="Open menu" onClick={() => setMobileNavOpen(true)}>
               <Menu size={20} />
             </MenuButton>
             <div>
@@ -349,8 +345,8 @@ const Footer = styled.div`
   color: ${(props) => props.theme.colors.textMuted};
 `;
 
-const CircleLogo = styled.img`
-  height: 16px;
+const ArcLogo = styled.img`
+  height: 14px;
   width: auto;
   object-fit: contain;
 `;
