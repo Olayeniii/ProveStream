@@ -34,6 +34,25 @@ async function waitForTurn(): Promise<void> {
  * transient errors; the pacing is what actually keeps the rate limit from
  * tripping in the first place.
  */
+/**
+ * Reduces an RPC failure to one line for logging. viem's rate-limit errors
+ * carry a short, human `shortMessage`/`details` plus a deeply nested `cause`
+ * chain (URL, request body, stack, the same info repeated at each layer) —
+ * printing the raw error via `console.error(msg, error)` dumps all of that,
+ * which is what floods the log on Arc testnet's frequent rate limiting.
+ */
+export function summarizeRpcError(error: unknown): string {
+  if (error && typeof error === 'object') {
+    const withMessages = error as { shortMessage?: unknown; details?: unknown };
+    if (typeof withMessages.shortMessage === 'string') {
+      return typeof withMessages.details === 'string'
+        ? `${withMessages.shortMessage} (${withMessages.details})`
+        : withMessages.shortMessage;
+    }
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
 export async function withRpcRetries<T>(
   fn: () => Promise<T>,
   { maxAttempts = DEFAULT_MAX_ATTEMPTS, baseDelayMs = DEFAULT_BASE_DELAY_MS } = {},

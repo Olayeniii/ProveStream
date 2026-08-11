@@ -2,7 +2,7 @@ import { decodeCredentialType, rewardPolicyAbi } from '@provenance-streams/proto
 import type { Address } from 'viem';
 import { createPublicClient, http } from 'viem';
 
-import { withRpcRetries } from './rpcRetry.js';
+import { summarizeRpcError, withRpcRetries } from './rpcRetry.js';
 
 export interface PolicySummary {
   id: string;
@@ -132,8 +132,7 @@ export class PolicyService {
         );
       } catch (error) {
         console.error(
-          `PolicyService: stopped scanning at block ${start.toString()} (resumes here next call):`,
-          error,
+          `PolicyService: stopped scanning at block ${start.toString()} (resumes here next call): ${summarizeRpcError(error)}`,
         );
         return;
       }

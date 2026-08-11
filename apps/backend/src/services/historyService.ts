@@ -2,7 +2,7 @@ import { attestationRegistryAbi, rewardDispatcherAbi } from '@provenance-streams
 import type { Address, Hex } from 'viem';
 import { createPublicClient, decodeFunctionData, http } from 'viem';
 
-import { withRpcRetries } from './rpcRetry.js';
+import { summarizeRpcError, withRpcRetries } from './rpcRetry.js';
 
 // Comfortably under the 10,000-block range many public RPC providers (including
 // Arc testnet's) enforce per `eth_getLogs` call — same limit `PolicyService` works around.
@@ -217,8 +217,7 @@ export class HistoryService {
         );
       } catch (error) {
         console.error(
-          `HistoryService: stopped scanning ${params.eventName} at block ${start.toString()} (resumes here next run):`,
-          error,
+          `HistoryService: stopped scanning ${params.eventName} at block ${start.toString()} (resumes here next run): ${summarizeRpcError(error)}`,
         );
         break;
       }
