@@ -14,8 +14,10 @@
     "@circle-fin/user-controlled-wallets": "10.8.0",
     "@provenance-streams/agent": "*",
     "@provenance-streams/protocol": "*",
+    "@types/pg": "8.21.0",
     "cors": "2.8.6",
     "express": "5.2.1",
+    "pg": "8.23.0",
     "viem": "2.55.8",
     "zod": "4.4.3"
   },

@@ -1,0 +1,16 @@
+# Local Postgres for `npm run dev`. Render injects DATABASE_URL from its own
+# managed Postgres add-on in production — this is purely local dev parity.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: provenance_streams
+      POSTGRES_PASSWORD: provenance_streams
+      POSTGRES_DB: provenance_streams
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

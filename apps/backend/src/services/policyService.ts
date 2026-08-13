@@ -92,7 +92,7 @@ export class PolicyService {
     };
   }
 
-  /** Snapshot of scan progress worth persisting across restarts — see `snapshotStore.ts`. */
+  /** Snapshot of scan progress worth persisting across restarts — see `db/repositories/chainScanProgressRepo.ts`. */
   getScanProgress(): { knownIds: string[]; scannedThroughBlock: string } {
     return {
       knownIds: [...this.knownIds].map((id) => id.toString()),

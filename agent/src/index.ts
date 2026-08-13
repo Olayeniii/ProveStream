@@ -51,7 +51,8 @@ export {
   SUPPORTED_DESTINATION_CHAINS,
   validateDestinationWallet,
 } from './wallet/destinationWallet.js';
-export type { StopWatcher } from './chainClient.js';
+export type { ChainConfig, StopWatcher } from './chainClient.js';
+export { createAgentPublicClient, createAgentWalletClient } from './chainClient.js';
 export type { AttestationSubmittedContext, AttestationSubmittedHandler } from './watcher.js';
 export type { RewardEligibleHandler } from './dispatcher.js';
 

@@ -2,8 +2,12 @@ import { createTreasuryService, parseAgentConfig, runAgent } from '@provenance-s
 import type { EvidenceSubmission } from '@provenance-streams/protocol';
 import type { Address, Hex } from 'viem';
 
+import { createChainScanProgressRepo } from './db/repositories/chainScanProgressRepo.js';
+import { runMigrations } from './db/migrate.js';
+import { createPool } from './db/pool.js';
 import { loadServerConfig } from './env.js';
 import { createAttestationReader } from './services/attestationReader.js';
+import { DecisionAnchorService } from './services/decisionAnchorService.js';
 import { HistoryService } from './services/historyService.js';
 import { PolicyService } from './services/policyService.js';
 import {
@@ -13,7 +17,6 @@ import {
 } from './services/riskAnalysisService.js';
 import type { RiskAnalysisProvider, RiskAnalysisResult } from './services/riskAnalysisService.js';
 import { SignatureVerificationService } from './services/signatureVerificationService.js';
-import { loadSnapshot, saveSnapshot } from './services/snapshotStore.js';
 import { WalletService } from './services/walletService.js';
 import { createServer } from './server.js';
 import { Store } from './store.js';
@@ -32,26 +35,31 @@ function resumeFrom(cursor: string | undefined, fallback: bigint): bigint {
 async function main(): Promise<void> {
   const config = loadServerConfig();
   const agentConfig = parseAgentConfig(config.agentConfig);
-  const snapshot = loadSnapshot();
 
-  const store = new Store();
-  if (snapshot) {
-    store.restore(snapshot);
-  }
+  const pool = createPool(config.databaseUrl);
+  await runMigrations(pool);
+  const chainScanProgress = createChainScanProgressRepo(pool);
+
+  const store = new Store(pool);
 
   const treasuryService = createTreasuryService(
     { rpcUrl: config.rpcUrl, chainId: config.chainId },
     agentConfig.treasury,
   );
   store.setTreasuryMode(agentConfig.treasury.mode);
+
+  const policyScanProgress = await chainScanProgress.get<{
+    knownIds: string[];
+    scannedThroughBlock: string;
+  }>('policyService');
   const policyService = new PolicyService({
     rpcUrl: config.rpcUrl,
     rewardPolicyAddress: config.rewardPolicyAddress,
     fromBlock: resumeFrom(
-      snapshot?.scannedThroughBlock.rewardPolicy,
+      policyScanProgress?.scannedThroughBlock,
       config.rewardPolicyDeployedAtBlock,
     ),
-    knownIds: snapshot?.knownPolicyIds,
+    knownIds: policyScanProgress?.knownIds,
   });
   const walletService: WalletService | undefined = config.embeddedWallet
     ? new WalletService({
@@ -94,8 +102,8 @@ async function main(): Promise<void> {
   /**
    * Independently verifies who signed `transactionHash` and records whether
    * it matches `auditor` — shared by the live `onAttestation` hook, the
-   * history backfill, and the "fill in what a restored snapshot doesn't
-   * have" pass below, so all three go through identical logic.
+   * history backfill, and the "fill in what a fresh in-memory map doesn't
+   * have yet" pass below, so all three go through identical logic.
    */
   function verifyAttestationSignature(
     attestationId: string,
@@ -178,9 +186,9 @@ async function main(): Promise<void> {
     if (!riskAnalysisService) {
       return;
     }
-    const knownIds = new Set(store.listAttestations().map((attestation) => attestation.id));
-    const candidateIds = store
-      .listAttestations()
+    const attestations = await store.listAttestations();
+    const knownIds = new Set(attestations.map((attestation) => attestation.id));
+    const candidateIds = attestations
       .filter(
         (attestation) =>
           attestation.supplier.toLowerCase() === submission.supplier.toLowerCase() &&
@@ -192,7 +200,7 @@ async function main(): Promise<void> {
     for (const id of candidateIds) {
       const proofHash = await attestationReader.getProofHash(BigInt(id)).catch(() => undefined);
       if (proofHash === submission.proofHash) {
-        store.markEvidenceAttested(submission.proofHash, id);
+        await store.markEvidenceAttested(submission.proofHash, id);
         await runRiskAnalysis(id, submission.evidenceText, submission.policyId);
         return;
       }
@@ -205,7 +213,7 @@ async function main(): Promise<void> {
       }
       const proofHash = await attestationReader.getProofHash(BigInt(id)).catch(() => undefined);
       if (proofHash === submission.proofHash) {
-        store.markEvidenceAttested(submission.proofHash, idString);
+        await store.markEvidenceAttested(submission.proofHash, idString);
         await runRiskAnalysis(idString, submission.evidenceText, submission.policyId);
         return;
       }
@@ -219,20 +227,19 @@ async function main(): Promise<void> {
   // (not fire-and-forget) so its block-number snapshot is guaranteed to
   // predate `runAgent`'s live subscriptions below, closing the only
   // realistic window where the two could otherwise observe the same event
-  // twice. Resumes from the persisted snapshot's cursor when there is one,
-  // so only a fresh install ever pays for the full historical scan.
+  // twice. Resumes from the persisted cursor when there is one, so only a
+  // fresh install ever pays for the full historical scan.
+  const attestationCursor = await chainScanProgress.get<string>('attestationRegistry');
+  const rewardCursor = await chainScanProgress.get<string>('rewardDispatcher');
   const historyService = new HistoryService({
     rpcUrl: config.rpcUrl,
     attestationRegistryAddress: config.attestationRegistryAddress,
     rewardDispatcherAddress: config.rewardDispatcherAddress,
     attestationRegistryFromBlock: resumeFrom(
-      snapshot?.scannedThroughBlock.attestationRegistry,
+      attestationCursor,
       config.attestationRegistryDeployedAtBlock,
     ),
-    rewardDispatcherFromBlock: resumeFrom(
-      snapshot?.scannedThroughBlock.rewardDispatcher,
-      config.rewardDispatcherDeployedAtBlock,
-    ),
+    rewardDispatcherFromBlock: resumeFrom(rewardCursor, config.rewardDispatcherDeployedAtBlock),
   });
   // Sequential, not Promise.all: both scans funnel through the same shared
   // RPC pacer (`rpcRetry.ts`) regardless, so running them one after another
@@ -253,23 +260,26 @@ async function main(): Promise<void> {
     return { rewards: [], scannedThroughBlock: config.rewardDispatcherDeployedAtBlock - 1n };
   });
   for (const attestation of attestationBackfill.attestations) {
-    store.addAttestation(attestation);
+    await store.addAttestation(attestation);
     // Unlike risk analysis, signature verification needs nothing that isn't
     // already on-chain — it can be (and is) redone for backfilled history too.
     verifyAttestationSignature(attestation.id, attestation.transactionHash, attestation.auditor);
   }
 
-  // A restored snapshot's attestations (see `store.restore` above) don't carry
-  // a signature-verification result — that was never persisted, since it's
-  // cheaply re-derivable — so fill those in too. Attestations the backfill
-  // loop just handled already have a pending/complete record and are skipped.
-  for (const attestation of store.listAttestations()) {
+  // Signature verification lives only in an in-memory Map (cheap to
+  // rederive, deliberately not persisted — see `Store`), so it starts empty
+  // on every restart. The backfill loop just above only covers attestations
+  // *this run's* chain scan found — which can lag far behind what's already
+  // in Postgres from a prior run, especially under Arc testnet's rate
+  // limiting — so fill in a verification for every already-known attestation
+  // this run's backfill loop didn't just handle.
+  for (const attestation of await store.listAttestations()) {
     if (!store.getSignatureVerification(attestation.id)) {
       verifyAttestationSignature(attestation.id, attestation.transactionHash, attestation.auditor);
     }
   }
   for (const reward of rewardBackfill.rewards) {
-    store.createPendingPayment({
+    await store.createPendingPayment({
       rewardId: reward.rewardId,
       attestationId: reward.attestationId ?? 'unknown',
       supplier: reward.supplier,
@@ -281,29 +291,28 @@ async function main(): Promise<void> {
     `Backfilled ${attestationBackfill.attestations.length.toString()} attestation(s) and ${rewardBackfill.rewards.length.toString()} reward(s) from chain history (scanned through block ${attestationBackfill.scannedThroughBlock.toString()} / ${rewardBackfill.scannedThroughBlock.toString()}).`,
   );
 
+  // These two cursors are static for the rest of this run (HistoryService's
+  // backfill is one-shot, at startup) — write once now rather than on an
+  // interval.
+  await chainScanProgress.set(
+    'attestationRegistry',
+    attestationBackfill.scannedThroughBlock.toString(),
+  );
+  await chainScanProgress.set('rewardDispatcher', rewardBackfill.scannedThroughBlock.toString());
+
   /**
-   * Flushes everything worth surviving a restart to disk: the Store's read
-   * models, `PolicyService`'s incremental scan progress (which advances on
-   * every `/api/policies` call, not just here), and the two history-scan
-   * cursors from this run's backfill. Called after the initial backfill,
-   * then periodically, and on shutdown — not on every single mutation,
-   * since a demo-scale event volume doesn't need that and periodic flushing
-   * keeps disk writes cheap.
+   * `PolicyService`'s scan progress keeps advancing over the process's
+   * lifetime (on every `/api/policies` call, not just at startup), unlike
+   * the two history cursors above — so, unlike those, it needs periodic
+   * persistence, not a one-shot write. Same 20s cadence as the old
+   * whole-`Store` snapshot flush this replaces, plus once on shutdown.
    */
-  const persistSnapshot = () => {
-    const policyProgress = policyService.getScanProgress();
-    saveSnapshot({
-      ...store.toSnapshotData(),
-      knownPolicyIds: policyProgress.knownIds,
-      scannedThroughBlock: {
-        attestationRegistry: attestationBackfill.scannedThroughBlock.toString(),
-        rewardDispatcher: rewardBackfill.scannedThroughBlock.toString(),
-        rewardPolicy: policyProgress.scannedThroughBlock,
-      },
-    });
+  const persistPolicyProgress = () => {
+    void chainScanProgress
+      .set('policyService', policyService.getScanProgress())
+      .catch((error: unknown) => console.error('Failed to persist policy scan progress:', error));
   };
-  persistSnapshot();
-  const persistInterval = setInterval(persistSnapshot, 20_000);
+  const persistInterval = setInterval(persistPolicyProgress, 20_000);
 
   /**
    * Tracks each attestation's risk-analysis outcome (resolving to `undefined`
@@ -327,14 +336,16 @@ async function main(): Promise<void> {
       }
       const attestationId = attestation.id.toString();
       const auditor = attestation.auditor;
-      store.addAttestation({
-        id: attestationId,
-        supplier: attestation.supplier,
-        auditor,
-        policyId: (attestation.policyId ?? 0n).toString(),
-        observedAt: new Date().toISOString(),
-        transactionHash: context.transactionHash,
-      });
+      void store
+        .addAttestation({
+          id: attestationId,
+          supplier: attestation.supplier,
+          auditor,
+          policyId: (attestation.policyId ?? 0n).toString(),
+          observedAt: new Date().toISOString(),
+          transactionHash: context.transactionHash,
+        })
+        .catch((error: unknown) => console.error('Failed to persist attestation:', error));
 
       verifyAttestationSignature(attestationId, context.transactionHash, auditor);
 
@@ -352,18 +363,20 @@ async function main(): Promise<void> {
       if (!riskAnalysisService) {
         void proofHashPromise.then((proofHash) => {
           if (proofHash) {
-            store.markEvidenceAttested(proofHash, attestationId);
+            void store
+              .markEvidenceAttested(proofHash, attestationId)
+              .catch((error: unknown) => console.error('Failed to mark evidence attested:', error));
           }
         });
         return;
       }
       const riskAnalysisPromise: Promise<RiskAnalysisResult | undefined> = proofHashPromise.then(
-        (proofHash) => {
+        async (proofHash) => {
           if (!proofHash) {
             return undefined;
           }
-          store.markEvidenceAttested(proofHash, attestationId);
-          const evidenceText = store.getEvidenceSubmission(proofHash)?.evidenceText;
+          await store.markEvidenceAttested(proofHash, attestationId);
+          const evidenceText = (await store.getEvidenceSubmission(proofHash))?.evidenceText;
           if (!evidenceText) {
             return undefined;
           }
@@ -380,39 +393,46 @@ async function main(): Promise<void> {
       if (reward.rewardId === undefined || reward.supplier === undefined) {
         return;
       }
-      store.createPendingPayment({
-        rewardId: reward.rewardId.toString(),
-        attestationId: context.attestationId?.toString() ?? 'unknown',
-        supplier: reward.supplier,
-        policyId: (reward.policyId ?? 0n).toString(),
-        rewardAmount: (reward.rewardAmount ?? 0n).toString(),
-      });
+      void store
+        .createPendingPayment({
+          rewardId: reward.rewardId.toString(),
+          attestationId: context.attestationId?.toString() ?? 'unknown',
+          supplier: reward.supplier,
+          policyId: (reward.policyId ?? 0n).toString(),
+          rewardAmount: (reward.rewardAmount ?? 0n).toString(),
+        })
+        .catch((error: unknown) => console.error('Failed to persist pending payment:', error));
     },
     onPaymentSettled: (rewardId, settlement) => {
-      if ('txHash' in settlement) {
-        store.updatePaymentStatus(rewardId.toString(), 'complete', {
-          txHash: settlement.txHash,
-          bridged: settlement.bridged,
-          destinationChain: settlement.destinationChain,
-        });
-      } else {
-        store.updatePaymentStatus(rewardId.toString(), 'failed', { error: settlement.error });
-      }
+      const update =
+        'txHash' in settlement
+          ? store.updatePaymentStatus(rewardId.toString(), 'complete', {
+              txHash: settlement.txHash,
+              bridged: settlement.bridged,
+              destinationChain: settlement.destinationChain,
+            })
+          : store.updatePaymentStatus(rewardId.toString(), 'failed', { error: settlement.error });
+      void update.catch((error: unknown) =>
+        console.error('Failed to update payment status:', error),
+      );
     },
     onFraudFlagged: (rewardId, result) => {
-      const payment = store.listPayments().find((entry) => entry.rewardId === rewardId.toString());
-      if (!payment) {
-        return;
-      }
-      store.createFraudAlert({
-        rewardId: rewardId.toString(),
-        attestationId: payment.attestationId,
-        supplier: payment.supplier,
-        policyId: payment.policyId,
-        rewardAmount: payment.rewardAmount,
-        score: result.score,
-        reasons: result.signals.map((signal) => signal.reason),
-      });
+      void (async () => {
+        const payments = await store.listPayments();
+        const payment = payments.find((entry) => entry.rewardId === rewardId.toString());
+        if (!payment) {
+          return;
+        }
+        await store.createFraudAlert({
+          rewardId: rewardId.toString(),
+          attestationId: payment.attestationId,
+          supplier: payment.supplier,
+          policyId: payment.policyId,
+          rewardAmount: payment.rewardAmount,
+          score: result.score,
+          reasons: result.signals.map((signal) => signal.reason),
+        });
+      })();
     },
     shouldHoldForReview: async (rewardId, context) => {
       const attestationId = context.attestationId?.toString();
@@ -434,11 +454,12 @@ async function main(): Promise<void> {
         return false;
       }
 
-      const payment = store.listPayments().find((entry) => entry.rewardId === rewardId.toString());
+      const payments = await store.listPayments();
+      const payment = payments.find((entry) => entry.rewardId === rewardId.toString());
       if (!payment) {
         return false;
       }
-      store.createFraudAlert({
+      await store.createFraudAlert({
         rewardId: rewardId.toString(),
         attestationId: payment.attestationId,
         supplier: payment.supplier,
@@ -450,19 +471,29 @@ async function main(): Promise<void> {
       return true;
     },
     onQueueStateChange: (rewardId, state, extra) => {
-      store.updateSettlementJobState(rewardId, state, {
-        attempt: extra?.attempt,
-        error: extra?.error instanceof Error ? extra.error.message : extra?.error?.toString(),
-      });
+      void store
+        .updateSettlementJobState(rewardId, state, {
+          attempt: extra?.attempt,
+          error: extra?.error instanceof Error ? extra.error.message : extra?.error?.toString(),
+        })
+        .catch((error: unknown) => console.error('Failed to persist settlement job state:', error));
     },
-    getDestinationWallet: (supplier) => {
-      const record = store.getDestinationWallet(supplier);
-      return Promise.resolve(
-        record
-          ? { chain: record.chain, address: record.address, x402ClaimUrl: record.x402ClaimUrl }
-          : undefined,
-      );
+    getDestinationWallet: async (supplier) => {
+      const record = await store.getDestinationWallet(supplier);
+      return record
+        ? { chain: record.chain, address: record.address, x402ClaimUrl: record.x402ClaimUrl }
+        : undefined;
     },
+  });
+
+  const decisionAnchorService = new DecisionAnchorService({
+    rpcUrl: config.rpcUrl,
+    chainId: config.chainId,
+    decisionRegistryAddress: config.decisionRegistryAddress,
+    // `AgentConfigInput` is the zod schema's pre-refine input type (plain
+    // `string`); the same value is validated as a real hex private key by
+    // `parseAgentConfig`/`runAgent` elsewhere on this exact field.
+    operatorPrivateKey: config.agentConfig.operatorPrivateKey as Hex,
   });
 
   const app = createServer({
@@ -475,6 +506,7 @@ async function main(): Promise<void> {
     attestationRegistryAddress: config.attestationRegistryAddress,
     defaultWalletBlockchain: config.circle?.treasuryBlockchain ?? 'ARC-TESTNET',
     agentControl,
+    decisionAnchorService,
     onEvidenceSubmitted: (submission) => {
       void tryAnalyzeRiskForNewEvidence(submission);
     },
@@ -491,7 +523,7 @@ async function main(): Promise<void> {
 
   const shutdown = () => {
     clearInterval(persistInterval);
-    persistSnapshot();
+    persistPolicyProgress();
     agentControl.stop();
     server.close(() => process.exit(0));
   };

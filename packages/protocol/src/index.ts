@@ -1,4 +1,5 @@
 export { attestationRegistryAbi } from './abi/attestationRegistry.js';
+export { decisionRegistryAbi } from './abi/decisionRegistry.js';
 export { rewardDispatcherAbi } from './abi/rewardDispatcher.js';
 export { rewardPolicyAbi } from './abi/rewardPolicy.js';
 export { arcTestnet, hardhatLocal } from './chains.js';
@@ -13,6 +14,7 @@ export type {
   AgentHealth,
   Attestation,
   AttestationSubmittedEventArgs,
+  DecisionAnchor,
   DestinationWallet,
   EvidenceSubmission,
   EvidenceSubmissionStatus,

@@ -79,9 +79,9 @@ interface ScannedLog {
  * testnet's public RPC rate-limits harder than its per-call block-range cap
  * alone suggests), it stops and returns whatever it found plus the block it
  * got to, instead of throwing — the caller persists that progress
- * (`snapshotStore.ts`) and resumes from there on the next call, so repeated
- * restarts converge on full history instead of each one re-paying the same
- * RPC cost and none of them finishing.
+ * (`db/repositories/chainScanProgressRepo.ts`) and resumes from there on the
+ * next call, so repeated restarts converge on full history instead of each
+ * one re-paying the same RPC cost and none of them finishing.
  *
  * A real limitation this can't paper over: whether a historical reward
  * actually *settled* isn't recoverable from chain at all — settlement is an

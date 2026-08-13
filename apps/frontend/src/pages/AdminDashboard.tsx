@@ -1,3 +1,4 @@
+import { arcTestnet } from '@provenance-streams/protocol';
 import type {
   AgentHealth,
   EvidenceSubmission,
@@ -7,7 +8,7 @@ import type {
   SettlementJobRecord,
   SignatureVerification,
 } from '@provenance-streams/protocol';
-import { CheckCircle2, XCircle } from 'lucide-react';
+import { CheckCircle2, ExternalLink, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 
@@ -334,7 +335,27 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
                     </RejectButton>
                   </ActionRow>
                 ) : (
-                  <StatusLabel $status={alert.status}>{alert.status}</StatusLabel>
+                  <ResolvedRow>
+                    <StatusLabel $status={alert.status}>{alert.status}</StatusLabel>
+                    {alert.resolutionAnchor?.status === 'pending' && (
+                      <AnchorLabel>Anchoring…</AnchorLabel>
+                    )}
+                    {alert.resolutionAnchor?.status === 'anchored' &&
+                      (alert.resolutionAnchor.txHash && env.chainId === arcTestnet.id ? (
+                        <AnchorLink
+                          href={`${arcTestnet.blockExplorers.default.url}/tx/${alert.resolutionAnchor.txHash}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Verified on-chain <ExternalLink size={12} />
+                        </AnchorLink>
+                      ) : (
+                        <AnchorLabel>Verified on-chain</AnchorLabel>
+                      ))}
+                    {alert.resolutionAnchor?.status === 'failed' && (
+                      <AnchorLabel $tone="error">Anchor failed</AnchorLabel>
+                    )}
+                  </ResolvedRow>
                 )}
               </AlertItem>
             ))}
@@ -577,11 +598,40 @@ const RejectButton = styled.button`
 `;
 
 const StatusLabel = styled.span<{ $status: FraudAlert['status'] }>`
-  align-self: flex-start;
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: ${(props) => getToneColor(props.theme, FRAUD_ALERT_STATUS_TONE[props.$status]).text};
+`;
+
+const ResolvedRow = styled.div`
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+`;
+
+/** Anchor-status text — pending/anchored (non-link) states of `FraudAlert.resolutionAnchor`. */
+const AnchorLabel = styled.span<{ $tone?: 'error' }>`
+  font-size: 0.72rem;
+  color: ${(props) =>
+    props.$tone === 'error'
+      ? getToneColor(props.theme, 'negative').text
+      : props.theme.colors.textMuted};
+`;
+
+/** Links to the block explorer for an anchored `resolutionAnchor.txHash`. */
+const AnchorLink = styled.a`
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: ${(props) => getToneColor(props.theme, 'positive').text};
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
 `;
 
 const LoginRow = styled.div`

@@ -7,6 +7,11 @@ import express from 'express';
 import type { Express, RequestHandler } from 'express';
 import { z } from 'zod';
 
+import {
+  computeFraudResolutionAnchor,
+  DECISION_TYPE_FRAUD_RESOLUTION,
+} from './services/decisionAnchorService.js';
+import type { DecisionAnchorService } from './services/decisionAnchorService.js';
 import type { PolicyService } from './services/policyService.js';
 import type { WalletService } from './services/walletService.js';
 import type { Store } from './store.js';
@@ -20,6 +25,8 @@ export interface ServerDependencies {
   defaultWalletBlockchain: string;
   attestationRegistryAddress: string;
   agentControl: AgentControl;
+  /** Anchors fraud-alert approve/reject decisions on-chain (see `anchorFraudResolution`). */
+  decisionAnchorService: DecisionAnchorService;
   /**
    * A shared secret gating every admin route (see docs/decisions.md). Deliberately
    * a single token, not session/JWT machinery — the goal is closing a real,
@@ -37,6 +44,38 @@ export interface ServerDependencies {
 
 function isEvidenceSubmissionStatus(value: unknown): value is EvidenceSubmissionStatus {
   return value === 'pending' || value === 'attested' || value === 'rejected';
+}
+
+/**
+ * Anchors a resolved fraud alert's content hash on `DecisionRegistry`,
+ * making the approve/reject decision tamper-evident instead of just an
+ * overwritable status field. Fires asynchronously — the HTTP response
+ * above doesn't wait on testnet confirmation latency; the frontend's
+ * existing poll picks up the result via `FraudAlert.resolutionAnchor`.
+ */
+async function anchorFraudResolution(deps: ServerDependencies, rewardId: string): Promise<void> {
+  const alert = await deps.store.getFraudAlert(rewardId);
+  if (!alert) {
+    return;
+  }
+  await deps.store.updateFraudAlertAnchor(rewardId, 'pending');
+  const { decisionId, contentHash } = computeFraudResolutionAnchor(alert);
+  try {
+    const result = await deps.decisionAnchorService.anchorDecision(
+      decisionId,
+      contentHash,
+      DECISION_TYPE_FRAUD_RESOLUTION,
+    );
+    if (result.status === 'anchored') {
+      await deps.store.updateFraudAlertAnchor(rewardId, 'anchored', result.txHash);
+    } else if (result.status === 'already-anchored') {
+      await deps.store.updateFraudAlertAnchor(rewardId, 'anchored');
+    } else {
+      await deps.store.updateFraudAlertAnchor(rewardId, 'failed');
+    }
+  } catch {
+    await deps.store.updateFraudAlertAnchor(rewardId, 'failed');
+  }
 }
 
 const adminLoginBodySchema = z.object({ token: z.string().min(1) });
@@ -127,56 +166,73 @@ export function createServer(deps: ServerDependencies): Express {
       .catch(next);
   });
 
-  app.get('/api/attestations', (_req, res) => {
-    res.json(deps.store.listAttestations());
+  app.get('/api/attestations', (_req, res, next) => {
+    deps.store
+      .listAttestations()
+      .then((attestations) => res.json(attestations))
+      .catch(next);
   });
 
-  app.get('/api/payments', (_req, res) => {
-    res.json(deps.store.listPayments());
+  app.get('/api/payments', (_req, res, next) => {
+    deps.store
+      .listPayments()
+      .then((payments) => res.json(payments))
+      .catch(next);
   });
 
-  app.post('/api/evidence-submissions', (req, res) => {
+  app.post('/api/evidence-submissions', (req, res, next) => {
     const body = evidenceSubmissionBodySchema.safeParse(req.body);
     if (!body.success) {
       res.status(400).json({ error: 'supplier, policyId, and evidenceText are required' });
       return;
     }
 
-    const record = deps.store.createEvidenceSubmission({
-      supplier: body.data.supplier,
-      policyId: body.data.policyId,
-      evidenceText: body.data.evidenceText,
-    });
-    deps.onEvidenceSubmitted?.(record);
-    res.json(record);
+    deps.store
+      .createEvidenceSubmission({
+        supplier: body.data.supplier,
+        policyId: body.data.policyId,
+        evidenceText: body.data.evidenceText,
+      })
+      .then((record) => {
+        deps.onEvidenceSubmitted?.(record);
+        res.json(record);
+      })
+      .catch(next);
   });
 
-  app.get('/api/evidence-submissions', (req, res) => {
+  app.get('/api/evidence-submissions', (req, res, next) => {
     const status = req.query.status;
     if (status !== undefined && !isEvidenceSubmissionStatus(status)) {
       res.status(400).json({ error: 'status must be pending, attested, or rejected' });
       return;
     }
-    res.json(deps.store.listEvidenceSubmissions(status));
+    deps.store
+      .listEvidenceSubmissions(status)
+      .then((submissions) => res.json(submissions))
+      .catch(next);
   });
 
-  app.post('/api/evidence-submissions/:proofHash/reject', (req, res) => {
+  app.post('/api/evidence-submissions/:proofHash/reject', (req, res, next) => {
     if (!isHex(req.params.proofHash)) {
       res.status(400).json({ error: 'proofHash must be a hex string.' });
       return;
     }
-    const submission = deps.store.getEvidenceSubmission(req.params.proofHash);
-    if (!submission) {
-      res.status(404).json({ error: 'No evidence submission found for this proof hash.' });
-      return;
-    }
-    if (submission.status !== 'pending') {
-      res.status(409).json({ error: `Evidence submission is already ${submission.status}.` });
-      return;
-    }
+    const proofHash = req.params.proofHash;
+    deps.store
+      .getEvidenceSubmission(proofHash)
+      .then((submission) => {
+        if (!submission) {
+          res.status(404).json({ error: 'No evidence submission found for this proof hash.' });
+          return;
+        }
+        if (submission.status !== 'pending') {
+          res.status(409).json({ error: `Evidence submission is already ${submission.status}.` });
+          return;
+        }
 
-    deps.store.markEvidenceRejected(req.params.proofHash);
-    res.json({ ok: true });
+        return deps.store.markEvidenceRejected(proofHash).then(() => res.json({ ok: true }));
+      })
+      .catch(next);
   });
 
   app.get('/api/risk-analyses', (_req, res) => {
@@ -187,7 +243,7 @@ export function createServer(deps: ServerDependencies): Express {
     res.json(deps.store.listSignatureVerifications());
   });
 
-  app.post('/api/destination-wallet', (req, res) => {
+  app.post('/api/destination-wallet', (req, res, next) => {
     const body = destinationWalletBodySchema.safeParse(req.body);
     if (!body.success) {
       res.status(400).json({ error: 'supplier, chain, and address are required' });
@@ -203,81 +259,111 @@ export function createServer(deps: ServerDependencies): Express {
       return;
     }
 
-    const record = deps.store.registerDestinationWallet({
-      supplier: body.data.supplier,
-      chain: validation.chain,
-      address: validation.address,
-      x402ClaimUrl: body.data.x402ClaimUrl,
-    });
-    res.json(record);
+    deps.store
+      .registerDestinationWallet({
+        supplier: body.data.supplier,
+        chain: validation.chain,
+        address: validation.address,
+        x402ClaimUrl: body.data.x402ClaimUrl,
+      })
+      .then((record) => res.json(record))
+      .catch(next);
   });
 
-  app.get('/api/destination-wallet/:supplier', (req, res) => {
+  app.get('/api/destination-wallet/:supplier', (req, res, next) => {
     const supplier = req.params.supplier;
     if (!isAddress(supplier)) {
       res.status(400).json({ error: 'supplier must be a valid address' });
       return;
     }
-    const record = deps.store.getDestinationWallet(supplier);
-    if (!record) {
-      res.status(404).json({ error: 'No destination wallet registered for this supplier.' });
-      return;
-    }
-    res.json(record);
+    deps.store
+      .getDestinationWallet(supplier)
+      .then((record) => {
+        if (!record) {
+          res.status(404).json({ error: 'No destination wallet registered for this supplier.' });
+          return;
+        }
+        res.json(record);
+      })
+      .catch(next);
   });
 
   app.use('/api/fraud-alerts', requireAdminToken);
   app.use('/api/agent-health', requireAdminToken);
   app.use('/api/settlement-queue', requireAdminToken);
 
-  app.get('/api/fraud-alerts', (_req, res) => {
-    res.json(deps.store.listFraudAlerts());
+  app.get('/api/fraud-alerts', (_req, res, next) => {
+    deps.store
+      .listFraudAlerts()
+      .then((alerts) => res.json(alerts))
+      .catch(next);
   });
 
-  app.post('/api/fraud-alerts/:id/approve', (req, res) => {
-    const alert = deps.store.getFraudAlert(req.params.id);
-    if (!alert) {
-      res.status(404).json({ error: 'No fraud alert found for this reward id.' });
-      return;
-    }
-    if (alert.status !== 'flagged') {
-      res.status(409).json({ error: `Fraud alert is already ${alert.status}.` });
-      return;
-    }
+  app.post('/api/fraud-alerts/:id/approve', (req, res, next) => {
+    deps.store
+      .getFraudAlert(req.params.id)
+      .then((alert) => {
+        if (!alert) {
+          res.status(404).json({ error: 'No fraud alert found for this reward id.' });
+          return;
+        }
+        if (alert.status !== 'flagged') {
+          res.status(409).json({ error: `Fraud alert is already ${alert.status}.` });
+          return;
+        }
 
-    deps.store.updateFraudAlertStatus(alert.rewardId, 'approved');
-    deps.agentControl.approvePayout({
-      rewardId: BigInt(alert.rewardId),
-      supplier: alert.supplier,
-      rewardAmount: BigInt(alert.rewardAmount),
-    });
-    res.json({ ok: true });
+        return deps.store.updateFraudAlertStatus(alert.rewardId, 'approved').then(() => {
+          deps.agentControl.approvePayout({
+            rewardId: BigInt(alert.rewardId),
+            supplier: alert.supplier,
+            rewardAmount: BigInt(alert.rewardAmount),
+          });
+          void anchorFraudResolution(deps, alert.rewardId);
+          res.json({ ok: true });
+        });
+      })
+      .catch(next);
   });
 
-  app.post('/api/fraud-alerts/:id/reject', (req, res) => {
-    const alert = deps.store.getFraudAlert(req.params.id);
-    if (!alert) {
-      res.status(404).json({ error: 'No fraud alert found for this reward id.' });
-      return;
-    }
-    if (alert.status !== 'flagged') {
-      res.status(409).json({ error: `Fraud alert is already ${alert.status}.` });
-      return;
-    }
+  app.post('/api/fraud-alerts/:id/reject', (req, res, next) => {
+    deps.store
+      .getFraudAlert(req.params.id)
+      .then((alert) => {
+        if (!alert) {
+          res.status(404).json({ error: 'No fraud alert found for this reward id.' });
+          return;
+        }
+        if (alert.status !== 'flagged') {
+          res.status(409).json({ error: `Fraud alert is already ${alert.status}.` });
+          return;
+        }
 
-    deps.store.updateFraudAlertStatus(alert.rewardId, 'rejected');
-    deps.store.updatePaymentStatus(alert.rewardId, 'failed', {
-      error: 'Rejected by admin after fraud review.',
-    });
-    res.json({ ok: true });
+        return deps.store.updateFraudAlertStatus(alert.rewardId, 'rejected').then(() =>
+          deps.store
+            .updatePaymentStatus(alert.rewardId, 'failed', {
+              error: 'Rejected by admin after fraud review.',
+            })
+            .then(() => {
+              void anchorFraudResolution(deps, alert.rewardId);
+              res.json({ ok: true });
+            }),
+        );
+      })
+      .catch(next);
   });
 
-  app.get('/api/agent-health', (_req, res) => {
-    res.json(deps.store.getAgentHealth());
+  app.get('/api/agent-health', (_req, res, next) => {
+    deps.store
+      .getAgentHealth()
+      .then((health) => res.json(health))
+      .catch(next);
   });
 
-  app.get('/api/settlement-queue', (_req, res) => {
-    res.json(deps.store.listSettlementJobs());
+  app.get('/api/settlement-queue', (_req, res, next) => {
+    deps.store
+      .listSettlementJobs()
+      .then((jobs) => res.json(jobs))
+      .catch(next);
   });
 
   app.post('/api/wallet-sessions', (req, res, next) => {
