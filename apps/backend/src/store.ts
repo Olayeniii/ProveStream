@@ -1,3 +1,5 @@
+import { EventEmitter } from 'node:events';
+
 import type {
   AgentHealth,
   DecisionAnchor,
@@ -13,6 +15,8 @@ import type {
   SettlementJobState,
   SignatureVerification,
   SignatureVerificationStatus,
+  StoreEvent,
+  StoreEventKind,
 } from '@provenance-streams/protocol';
 import type { Pool } from 'pg';
 import type { Address, Hex } from 'viem';
@@ -24,6 +28,7 @@ import { createDestinationWalletsRepo } from './db/repositories/destinationWalle
 import { createEvidenceSubmissionsRepo } from './db/repositories/evidenceSubmissionsRepo.js';
 import { createFraudAlertsRepo } from './db/repositories/fraudAlertsRepo.js';
 import { createPaymentsRepo } from './db/repositories/paymentsRepo.js';
+import { createRiskAnalysesRepo } from './db/repositories/riskAnalysesRepo.js';
 import { createSettlementJobsRepo } from './db/repositories/settlementJobsRepo.js';
 
 export type { AttestationRecord } from './db/repositories/attestationsRepo.js';
@@ -31,11 +36,13 @@ export type { AttestationRecord } from './db/repositories/attestationsRepo.js';
 /**
  * Read models for the dashboards, populated by the agent's hooks as it
  * observes on-chain events. Attestations/payments/evidence submissions/
- * destination wallets/fraud alerts/settlement jobs persist to Postgres (see
- * `db/repositories/`) so they survive a restart or redeploy. `riskAnalyses`
- * and `signatureVerifications` stay in-memory only — deliberately excluded
- * from persistence, since both are cheap to rederive from chain state on
- * boot and neither needs to survive a restart.
+ * destination wallets/fraud alerts/settlement jobs/risk analyses persist to
+ * Postgres (see `db/repositories/`) so they survive a restart or redeploy.
+ * `signatureVerifications` stays in-memory only — genuinely cheap to
+ * rederive (it's a pure function of an already-confirmed transaction, no
+ * external API call), unlike risk analyses (a real AI call, previously also
+ * in-memory only — that meant a restart silently wiped real scores, since
+ * nothing re-runs analysis for already-attested items on boot).
  */
 export class Store {
   private readonly attestationsRepo;
@@ -44,10 +51,11 @@ export class Store {
   private readonly destinationWalletsRepo;
   private readonly fraudAlertsRepo;
   private readonly settlementJobsRepo;
-  private readonly riskAnalyses = new Map<string, RiskAnalysis>();
+  private readonly riskAnalysesRepo;
   private readonly signatureVerifications = new Map<string, SignatureVerification>();
   private lastEventAt: string | undefined;
   private treasuryMode = 'local';
+  private readonly emitter = new EventEmitter();
 
   constructor(pool: Pool) {
     this.attestationsRepo = createAttestationsRepo(pool);
@@ -56,6 +64,19 @@ export class Store {
     this.destinationWalletsRepo = createDestinationWalletsRepo(pool);
     this.fraudAlertsRepo = createFraudAlertsRepo(pool);
     this.settlementJobsRepo = createSettlementJobsRepo(pool);
+    this.riskAnalysesRepo = createRiskAnalysesRepo(pool);
+  }
+
+  /** Subscribes to every mutation across all entities; returns an unsubscribe function. Powers the SSE routes in `server.ts` — nothing else should call this. */
+  onChange(listener: (event: StoreEvent) => void): () => void {
+    this.emitter.on('change', listener);
+    return () => {
+      this.emitter.off('change', listener);
+    };
+  }
+
+  private emitChange(kind: StoreEventKind): void {
+    this.emitter.emit('change', { kind } satisfies StoreEvent);
   }
 
   /**
@@ -68,6 +89,7 @@ export class Store {
     const wasNew = await this.attestationsRepo.insertIfNew(record);
     if (wasNew) {
       this.lastEventAt = new Date().toISOString();
+      this.emitChange('attestation');
     }
   }
 
@@ -75,7 +97,7 @@ export class Store {
     return this.attestationsRepo.list();
   }
 
-  createPendingPayment(input: {
+  async createPendingPayment(input: {
     rewardId: string;
     attestationId: string;
     supplier: Address;
@@ -83,10 +105,11 @@ export class Store {
     rewardAmount: string;
   }): Promise<void> {
     this.lastEventAt = new Date().toISOString();
-    return this.paymentsRepo.createPending(input);
+    await this.paymentsRepo.createPending(input);
+    this.emitChange('payment');
   }
 
-  updatePaymentStatus(
+  async updatePaymentStatus(
     rewardId: string,
     status: PaymentStatus,
     extra?: {
@@ -97,7 +120,8 @@ export class Store {
       destinationTxHash?: Hex;
     },
   ): Promise<void> {
-    return this.paymentsRepo.updateStatus(rewardId, status, extra);
+    await this.paymentsRepo.updateStatus(rewardId, status, extra);
+    this.emitChange('payment');
   }
 
   listPayments(): Promise<Payment[]> {
@@ -114,13 +138,15 @@ export class Store {
    * by the table's `UNIQUE (proof_hash)` constraint plus the caller retrying
    * `getByProofHash` first, same as before).
    */
-  createEvidenceSubmission(input: {
+  async createEvidenceSubmission(input: {
     supplier: Address;
     policyId: string;
     evidenceText: string;
   }): Promise<EvidenceSubmission> {
     const proofHash = keccak256(toHex(input.evidenceText));
-    return this.evidenceSubmissionsRepo.create({ ...input, proofHash });
+    const record = await this.evidenceSubmissionsRepo.create({ ...input, proofHash });
+    this.emitChange('evidence-submission');
+    return record;
   }
 
   /** Non-destructive — a submission stays queryable after an auditor attests to it. */
@@ -132,25 +158,22 @@ export class Store {
     return this.evidenceSubmissionsRepo.list(status);
   }
 
-  markEvidenceAttested(proofHash: Hex, attestationId: string): Promise<void> {
-    return this.evidenceSubmissionsRepo.markAttested(proofHash, attestationId);
+  async markEvidenceAttested(proofHash: Hex, attestationId: string): Promise<void> {
+    await this.evidenceSubmissionsRepo.markAttested(proofHash, attestationId);
+    this.emitChange('evidence-submission');
   }
 
-  markEvidenceRejected(proofHash: Hex): Promise<void> {
-    return this.evidenceSubmissionsRepo.markRejected(proofHash);
+  async markEvidenceRejected(proofHash: Hex): Promise<void> {
+    await this.evidenceSubmissionsRepo.markRejected(proofHash);
+    this.emitChange('evidence-submission');
   }
 
-  createPendingRiskAnalysis(attestationId: string): void {
-    const now = new Date().toISOString();
-    this.riskAnalyses.set(attestationId, {
-      attestationId,
-      status: 'pending',
-      createdAt: now,
-      updatedAt: now,
-    });
+  async createPendingRiskAnalysis(attestationId: string): Promise<void> {
+    await this.riskAnalysesRepo.createPending(attestationId);
+    this.emitChange('risk-analysis');
   }
 
-  updateRiskAnalysisStatus(
+  async updateRiskAnalysisStatus(
     attestationId: string,
     status: RiskAnalysisStatus,
     extra?: {
@@ -160,36 +183,17 @@ export class Store {
       provider?: string;
       error?: string;
     },
-  ): void {
-    const analysis = this.riskAnalyses.get(attestationId);
-    if (!analysis) {
-      return;
-    }
-    analysis.status = status;
-    analysis.updatedAt = new Date().toISOString();
-    if (extra?.score !== undefined) {
-      analysis.score = extra.score;
-    }
-    if (extra?.confidence !== undefined) {
-      analysis.confidence = extra.confidence;
-    }
-    if (extra?.summary) {
-      analysis.summary = extra.summary;
-    }
-    if (extra?.provider) {
-      analysis.provider = extra.provider;
-    }
-    if (extra?.error) {
-      analysis.error = extra.error;
-    }
+  ): Promise<void> {
+    await this.riskAnalysesRepo.updateStatus(attestationId, status, extra);
+    this.emitChange('risk-analysis');
   }
 
-  listRiskAnalyses(): RiskAnalysis[] {
-    return [...this.riskAnalyses.values()];
+  listRiskAnalyses(): Promise<RiskAnalysis[]> {
+    return this.riskAnalysesRepo.list();
   }
 
-  getRiskAnalysis(attestationId: string): RiskAnalysis | undefined {
-    return this.riskAnalyses.get(attestationId);
+  getRiskAnalysis(attestationId: string): Promise<RiskAnalysis | undefined> {
+    return this.riskAnalysesRepo.get(attestationId);
   }
 
   createPendingSignatureVerification(attestationId: string): void {
@@ -200,6 +204,7 @@ export class Store {
       createdAt: now,
       updatedAt: now,
     });
+    this.emitChange('signature-verification');
   }
 
   updateSignatureVerificationStatus(
@@ -222,6 +227,7 @@ export class Store {
     if (extra?.error) {
       record.error = extra.error;
     }
+    this.emitChange('signature-verification');
   }
 
   getSignatureVerification(attestationId: string): SignatureVerification | undefined {
@@ -236,21 +242,23 @@ export class Store {
     this.treasuryMode = mode;
   }
 
-  registerDestinationWallet(input: {
+  async registerDestinationWallet(input: {
     supplier: Address;
     /** Not always `0x`-prefixed — Solana destinations use base58. */
     chain: string;
     address: string;
     x402ClaimUrl?: string | undefined;
   }): Promise<DestinationWallet> {
-    return this.destinationWalletsRepo.register(input);
+    const record = await this.destinationWalletsRepo.register(input);
+    this.emitChange('destination-wallet');
+    return record;
   }
 
   getDestinationWallet(supplier: Address): Promise<DestinationWallet | undefined> {
     return this.destinationWalletsRepo.get(supplier);
   }
 
-  createFraudAlert(input: {
+  async createFraudAlert(input: {
     rewardId: string;
     attestationId: string;
     supplier: Address;
@@ -259,36 +267,40 @@ export class Store {
     score: number;
     reasons: string[];
   }): Promise<void> {
-    return this.fraudAlertsRepo.create(input);
+    await this.fraudAlertsRepo.create(input);
+    this.emitChange('fraud-alert');
   }
 
   getFraudAlert(rewardId: string): Promise<FraudAlert | undefined> {
     return this.fraudAlertsRepo.get(rewardId);
   }
 
-  updateFraudAlertStatus(rewardId: string, status: FraudAlertStatus): Promise<void> {
-    return this.fraudAlertsRepo.updateStatus(rewardId, status);
+  async updateFraudAlertStatus(rewardId: string, status: FraudAlertStatus): Promise<void> {
+    await this.fraudAlertsRepo.updateStatus(rewardId, status);
+    this.emitChange('fraud-alert');
   }
 
   /** Tracks whether this alert's resolution has been anchored on `DecisionRegistry` (see `DecisionAnchorService`). */
-  updateFraudAlertAnchor(
+  async updateFraudAlertAnchor(
     rewardId: string,
     status: DecisionAnchor['status'],
     txHash?: Hex,
   ): Promise<void> {
-    return this.fraudAlertsRepo.updateAnchor(rewardId, status, txHash);
+    await this.fraudAlertsRepo.updateAnchor(rewardId, status, txHash);
+    this.emitChange('fraud-alert');
   }
 
   listFraudAlerts(): Promise<FraudAlert[]> {
     return this.fraudAlertsRepo.list();
   }
 
-  updateSettlementJobState(
+  async updateSettlementJobState(
     rewardId: string,
     state: SettlementJobState,
     extra?: { attempt?: number | undefined; error?: string | undefined },
   ): Promise<void> {
-    return this.settlementJobsRepo.updateState(rewardId, state, extra);
+    await this.settlementJobsRepo.updateState(rewardId, state, extra);
+    this.emitChange('settlement-job');
   }
 
   listSettlementJobs(): Promise<SettlementJobRecord[]> {

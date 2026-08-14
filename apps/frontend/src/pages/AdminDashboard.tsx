@@ -9,17 +9,31 @@ import type {
   SignatureVerification,
 } from '@provenance-streams/protocol';
 import { CheckCircle2, ExternalLink, XCircle } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 
 import { AppShell } from '../components/AppShell.js';
 import { TriggerLogPanel } from '../components/TriggerLogPanel.js';
+import { useLiveStream } from '../hooks/useLiveStream.js';
+import { ADMIN_SESSION_STORAGE_KEY } from '../lib/adminSession.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, AttestationRecord } from '../lib/api.js';
 import { formatRelativeTime } from '../lib/format.js';
 import type { StreamTone } from '../lib/streams.js';
 import { getToneColor } from '../lib/tone.js';
 import { buildTriggerLog } from '../lib/triggerLog.js';
+
+// The admin SSE channel forwards every event kind (see server.ts), so this
+// just lists everything this page actually refetches on.
+const ADMIN_LIVE_KINDS = [
+  'attestation',
+  'payment',
+  'risk-analysis',
+  'signature-verification',
+  'evidence-submission',
+  'fraud-alert',
+  'settlement-job',
+] as const;
 
 interface HealthState {
   backend: 'ok' | 'error' | 'checking';
@@ -70,12 +84,14 @@ function settlementJobLabel(job: SettlementJobRecord, payments: Payment[]): stri
   return JOB_STATE_LABEL[job.state];
 }
 
-/** Not a long-lived credential — cleared on tab close, unlike `localStorage`. */
-const ADMIN_TOKEN_STORAGE_KEY = 'adminToken';
-
 export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
+  // Despite the variable name (kept to minimize churn across this file's many
+  // call sites), this holds a real backend-issued session token from
+  // `POST /api/admin/login` — not the raw `ADMIN_TOKEN` shared secret the
+  // user types in. Not a long-lived credential either way — cleared on tab
+  // close, unlike `localStorage`.
   const [adminToken, setAdminToken] = useState<string | undefined>(
-    () => sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) ?? undefined,
+    () => sessionStorage.getItem(ADMIN_SESSION_STORAGE_KEY) ?? undefined,
   );
   const [loginValue, setLoginValue] = useState('');
   const [loginError, setLoginError] = useState<string | undefined>(undefined);
@@ -90,12 +106,12 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
     api
       .adminLogin(loginValue)
       .then((result) => {
-        if (!result.ok) {
+        if (!result.ok || !result.sessionToken) {
           setLoginError('Incorrect admin token.');
           return;
         }
-        sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, loginValue);
-        setAdminToken(loginValue);
+        sessionStorage.setItem(ADMIN_SESSION_STORAGE_KEY, result.sessionToken);
+        setAdminToken(result.sessionToken);
       })
       .catch((error: unknown) =>
         setLoginError(error instanceof Error ? error.message : 'Failed to sign in.'),
@@ -104,7 +120,7 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
   };
 
   const handleLogout = () => {
-    sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+    sessionStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
     setAdminToken(undefined);
   };
 
@@ -119,7 +135,7 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
   const [evidenceSubmissions, setEvidenceSubmissions] = useState<EvidenceSubmission[]>([]);
   const [alertActionError, setAlertActionError] = useState<string | undefined>(undefined);
 
-  const refresh = useCallback(() => {
+  function refresh() {
     if (!adminToken) {
       return;
     }
@@ -155,7 +171,7 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
       .listEvidenceSubmissions()
       .then(setEvidenceSubmissions)
       .catch(() => undefined);
-  }, [api, adminToken]);
+  }
 
   const triggerLog = useMemo(
     () =>
@@ -179,11 +195,19 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
     ],
   );
 
-  useEffect(() => {
-    refresh();
-    const interval = setInterval(refresh, 10_000);
-    return () => clearInterval(interval);
-  }, [refresh]);
+  useEffect(refresh, [api, adminToken]);
+  // Replaces the old 10s polling interval with real push — an admin session
+  // is required for this stream too (fraud alerts / settlement queue /
+  // agent health are all admin-only), and `EventSource` can't set custom
+  // headers, so the token travels as a query param on this one route only
+  // (see server.ts's `/api/events/admin`).
+  useLiveStream(
+    adminToken
+      ? `${env.backendUrl}/api/events/admin?token=${encodeURIComponent(adminToken)}`
+      : undefined,
+    ADMIN_LIVE_KINDS,
+    refresh,
+  );
 
   useEffect(() => {
     if (!adminToken) {

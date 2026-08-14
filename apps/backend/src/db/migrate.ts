@@ -1,7 +1,10 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { createLogger } from '@provenance-streams/logger';
 import type { Pool } from 'pg';
+
+const logger = createLogger('migrate');
 
 const MIGRATIONS_DIR = path.join(import.meta.dirname, '..', '..', 'migrations');
 
@@ -40,7 +43,7 @@ export async function runMigrations(pool: Pool): Promise<void> {
       await client.query(sql);
       await client.query('INSERT INTO schema_migrations (name) VALUES ($1)', [file]);
       await client.query('COMMIT');
-      console.log(`Applied migration ${file}`);
+      logger.info(`Applied migration ${file}`);
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

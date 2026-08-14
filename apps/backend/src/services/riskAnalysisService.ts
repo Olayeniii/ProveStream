@@ -1,4 +1,7 @@
+import { createLogger } from '@provenance-streams/logger';
 import { z } from 'zod';
+
+const logger = createLogger('riskAnalysisService');
 
 export interface RiskAnalysisResult {
   score: number;
@@ -167,7 +170,7 @@ export class RiskAnalysisService {
         return { ...result, provider: provider.name };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        console.error(`Risk analysis provider "${provider.name}" failed, trying next:`, message);
+        logger.error(`Risk analysis provider "${provider.name}" failed, trying next:`, { message });
         errors.push(`${provider.name}: ${message}`);
       }
     }

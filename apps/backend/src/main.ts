@@ -1,12 +1,16 @@
 import { createTreasuryService, parseAgentConfig, runAgent } from '@provenance-streams/agent';
+import { createLogger } from '@provenance-streams/logger';
 import type { EvidenceSubmission } from '@provenance-streams/protocol';
 import type { Address, Hex } from 'viem';
 
 import { createChainScanProgressRepo } from './db/repositories/chainScanProgressRepo.js';
+import { createSessionsRepo } from './db/repositories/sessionsRepo.js';
+import { createUsersRepo } from './db/repositories/usersRepo.js';
 import { runMigrations } from './db/migrate.js';
 import { createPool } from './db/pool.js';
 import { loadServerConfig } from './env.js';
 import { createAttestationReader } from './services/attestationReader.js';
+import { CircleWebhookService } from './services/circleWebhookService.js';
 import { DecisionAnchorService } from './services/decisionAnchorService.js';
 import { HistoryService } from './services/historyService.js';
 import { PolicyService } from './services/policyService.js';
@@ -27,6 +31,8 @@ try {
   // No .env file present; fall back to whatever is already in process.env.
 }
 
+const logger = createLogger('main');
+
 /** One past a persisted cursor, or `fallback` (usually the contract's deployment block) if there isn't one yet. */
 function resumeFrom(cursor: string | undefined, fallback: bigint): bigint {
   return cursor !== undefined ? BigInt(cursor) + 1n : fallback;
@@ -39,6 +45,8 @@ async function main(): Promise<void> {
   const pool = createPool(config.databaseUrl);
   await runMigrations(pool);
   const chainScanProgress = createChainScanProgressRepo(pool);
+  const usersRepo = createUsersRepo(pool);
+  const sessionsRepo = createSessionsRepo(pool);
 
   const store = new Store(pool);
 
@@ -132,32 +140,30 @@ async function main(): Promise<void> {
    * `tryAnalyzeRiskForNewEvidence` (evidence submitted *after* its matching
    * attestation already happened) so both go through identical logic.
    */
-  function runRiskAnalysis(
+  async function runRiskAnalysis(
     attestationId: string,
     evidenceText: string,
     policyId: string,
   ): Promise<RiskAnalysisResult | undefined> {
     if (!riskAnalysisService) {
-      return Promise.resolve(undefined);
+      return undefined;
     }
-    store.createPendingRiskAnalysis(attestationId);
-    return riskAnalysisService
-      .analyzeEvidence({ evidenceText, policyId })
-      .then((result) => {
-        store.updateRiskAnalysisStatus(attestationId, 'complete', result);
-        return result;
-      })
-      .catch((error: unknown) => {
-        // Each provider's raw error (status codes, quota details, model ids) is
-        // already logged as it happens inside RiskAnalysisService — what reaches
-        // the store/UI here must stay a clean, model-agnostic message; never the
-        // raw multi-provider dump `error` carries.
-        console.error('Risk analysis unavailable for attestation', attestationId, error);
-        store.updateRiskAnalysisStatus(attestationId, 'failed', {
-          error: 'AI risk analysis is temporarily unavailable.',
-        });
-        return undefined;
+    await store.createPendingRiskAnalysis(attestationId);
+    try {
+      const result = await riskAnalysisService.analyzeEvidence({ evidenceText, policyId });
+      await store.updateRiskAnalysisStatus(attestationId, 'complete', result);
+      return result;
+    } catch (error) {
+      // Each provider's raw error (status codes, quota details, model ids) is
+      // already logged as it happens inside RiskAnalysisService — what reaches
+      // the store/UI here must stay a clean, model-agnostic message; never the
+      // raw multi-provider dump `error` carries.
+      logger.error('Risk analysis unavailable for attestation', { attestationId, error });
+      await store.updateRiskAnalysisStatus(attestationId, 'failed', {
+        error: 'AI risk analysis is temporarily unavailable.',
       });
+      return undefined;
+    }
   }
 
   /** How far past the Store's known attestations to look, on-chain, for a proofHash match — see `tryAnalyzeRiskForNewEvidence`. */
@@ -188,13 +194,16 @@ async function main(): Promise<void> {
     }
     const attestations = await store.listAttestations();
     const knownIds = new Set(attestations.map((attestation) => attestation.id));
-    const candidateIds = attestations
-      .filter(
-        (attestation) =>
-          attestation.supplier.toLowerCase() === submission.supplier.toLowerCase() &&
-          attestation.policyId === submission.policyId &&
-          !store.getRiskAnalysis(attestation.id),
-      )
+    const matchingAttestations = attestations.filter(
+      (attestation) =>
+        attestation.supplier.toLowerCase() === submission.supplier.toLowerCase() &&
+        attestation.policyId === submission.policyId,
+    );
+    const alreadyAnalyzed = await Promise.all(
+      matchingAttestations.map((attestation) => store.getRiskAnalysis(attestation.id)),
+    );
+    const candidateIds = matchingAttestations
+      .filter((_attestation, index) => !alreadyAnalyzed[index])
       .map((attestation) => attestation.id);
 
     for (const id of candidateIds) {
@@ -249,14 +258,14 @@ async function main(): Promise<void> {
   const attestationBackfill = await historyService
     .listHistoricalAttestations()
     .catch((error: unknown) => {
-      console.error('Failed to backfill attestation history:', error);
+      logger.error('Failed to backfill attestation history:', { error });
       return {
         attestations: [],
         scannedThroughBlock: config.attestationRegistryDeployedAtBlock - 1n,
       };
     });
   const rewardBackfill = await historyService.listHistoricalRewards().catch((error: unknown) => {
-    console.error('Failed to backfill reward history:', error);
+    logger.error('Failed to backfill reward history:', { error });
     return { rewards: [], scannedThroughBlock: config.rewardDispatcherDeployedAtBlock - 1n };
   });
   for (const attestation of attestationBackfill.attestations) {
@@ -287,7 +296,7 @@ async function main(): Promise<void> {
       rewardAmount: reward.rewardAmount,
     });
   }
-  console.log(
+  logger.info(
     `Backfilled ${attestationBackfill.attestations.length.toString()} attestation(s) and ${rewardBackfill.rewards.length.toString()} reward(s) from chain history (scanned through block ${attestationBackfill.scannedThroughBlock.toString()} / ${rewardBackfill.scannedThroughBlock.toString()}).`,
   );
 
@@ -310,7 +319,9 @@ async function main(): Promise<void> {
   const persistPolicyProgress = () => {
     void chainScanProgress
       .set('policyService', policyService.getScanProgress())
-      .catch((error: unknown) => console.error('Failed to persist policy scan progress:', error));
+      .catch((error: unknown) =>
+        logger.error('Failed to persist policy scan progress:', { error }),
+      );
   };
   const persistInterval = setInterval(persistPolicyProgress, 20_000);
 
@@ -345,7 +356,7 @@ async function main(): Promise<void> {
           observedAt: new Date().toISOString(),
           transactionHash: context.transactionHash,
         })
-        .catch((error: unknown) => console.error('Failed to persist attestation:', error));
+        .catch((error: unknown) => logger.error('Failed to persist attestation:', { error }));
 
       verifyAttestationSignature(attestationId, context.transactionHash, auditor);
 
@@ -356,7 +367,7 @@ async function main(): Promise<void> {
       const proofHashPromise = attestationReader
         .getProofHash(attestationIdValue)
         .catch((error: unknown) => {
-          console.error('Failed to read proof hash for attestation:', error);
+          logger.error('Failed to read proof hash for attestation:', { error });
           return undefined;
         });
 
@@ -365,7 +376,9 @@ async function main(): Promise<void> {
           if (proofHash) {
             void store
               .markEvidenceAttested(proofHash, attestationId)
-              .catch((error: unknown) => console.error('Failed to mark evidence attested:', error));
+              .catch((error: unknown) =>
+                logger.error('Failed to mark evidence attested:', { error }),
+              );
           }
         });
         return;
@@ -401,7 +414,7 @@ async function main(): Promise<void> {
           policyId: (reward.policyId ?? 0n).toString(),
           rewardAmount: (reward.rewardAmount ?? 0n).toString(),
         })
-        .catch((error: unknown) => console.error('Failed to persist pending payment:', error));
+        .catch((error: unknown) => logger.error('Failed to persist pending payment:', { error }));
     },
     onPaymentSettled: (rewardId, settlement) => {
       const update =
@@ -413,7 +426,7 @@ async function main(): Promise<void> {
             })
           : store.updatePaymentStatus(rewardId.toString(), 'failed', { error: settlement.error });
       void update.catch((error: unknown) =>
-        console.error('Failed to update payment status:', error),
+        logger.error('Failed to update payment status:', { error }),
       );
     },
     onFraudFlagged: (rewardId, result) => {
@@ -476,7 +489,9 @@ async function main(): Promise<void> {
           attempt: extra?.attempt,
           error: extra?.error instanceof Error ? extra.error.message : extra?.error?.toString(),
         })
-        .catch((error: unknown) => console.error('Failed to persist settlement job state:', error));
+        .catch((error: unknown) =>
+          logger.error('Failed to persist settlement job state:', { error }),
+        );
     },
     getDestinationWallet: async (supplier) => {
       const record = await store.getDestinationWallet(supplier);
@@ -496,9 +511,19 @@ async function main(): Promise<void> {
     operatorPrivateKey: config.agentConfig.operatorPrivateKey as Hex,
   });
 
+  // Reuses the same Circle API key already required for embedded
+  // wallets/treasury — Circle's webhook signature scheme needs it to fetch
+  // the (cached, static-per-keyId) notification public key, not a separate
+  // webhook-specific secret.
+  const circleWebhookService = config.circle
+    ? new CircleWebhookService(config.circle.apiKey)
+    : undefined;
+
   const app = createServer({
     corsOrigin: config.corsOrigin,
     adminToken: config.adminToken,
+    usersRepo,
+    sessionsRepo,
     store,
     treasuryService,
     policyService,
@@ -507,15 +532,16 @@ async function main(): Promise<void> {
     defaultWalletBlockchain: config.circle?.treasuryBlockchain ?? 'ARC-TESTNET',
     agentControl,
     decisionAnchorService,
+    circleWebhookService,
     onEvidenceSubmitted: (submission) => {
       void tryAnalyzeRiskForNewEvidence(submission);
     },
   });
 
   const server = app.listen(config.port, () => {
-    console.log(`Backend API listening on port ${config.port.toString()}`);
+    logger.info(`Backend API listening on port ${config.port.toString()}`);
     if (!config.embeddedWallet) {
-      console.log(
+      logger.info(
         'Embedded wallets are disabled: set CIRCLE_API_KEY / CIRCLE_APP_ID to enable them.',
       );
     }
@@ -532,6 +558,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error('Failed to start backend: invalid configuration.\n', error);
+  logger.error('Failed to start backend: invalid configuration.', { error });
   process.exitCode = 1;
 });

@@ -17,6 +17,10 @@ ignition/deployments/
 .vscode/*
 !.vscode/extensions.json
 
+# Claude Code local settings — per-user permission state, not project config.
+.claude/settings.json
+.claude/settings.local.json
+
 Documents/
 .github/instructions/
 .github/copilot-instructions.md

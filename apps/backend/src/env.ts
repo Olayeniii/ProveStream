@@ -34,7 +34,7 @@ const serverConfigSchema = z.object({
   databaseUrl: z.string().min(1),
   circle: circleSchema.partial(),
   geminiApiKey: z.string().optional(),
-  geminiModel: z.string().min(1).default('gemini-2.0-flash'),
+  geminiModel: z.string().min(1).default('gemini-flash-latest'),
   nvidiaApiKey: z.string().optional(),
   nvidiaDeepseekModel: z.string().min(1).default('deepseek-ai/deepseek-v4-flash'),
   nvidiaMistralModel: z.string().min(1).default('mistralai/mixtral-8x22b-instruct-v0.1'),

@@ -20,6 +20,7 @@ import { Skeleton } from '../components/Skeleton.js';
 import { WalletChip } from '../components/WalletChip.js';
 import type { AppEnv } from '../env.js';
 import { useEmbeddedWallet } from '../hooks/useEmbeddedWallet.js';
+import { useLiveStream } from '../hooks/useLiveStream.js';
 import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
 import { getPublicClient } from '../lib/clients.js';
 import { formatRelativeTime } from '../lib/format.js';
@@ -32,6 +33,15 @@ const EVIDENCE_STATUS_TONE: Record<EvidenceSubmission['status'], StreamTone> = {
   attested: 'positive',
   rejected: 'negative',
 };
+
+const LIVE_KINDS = [
+  'attestation',
+  'payment',
+  'risk-analysis',
+  'signature-verification',
+  'destination-wallet',
+  'evidence-submission',
+] as const;
 
 export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
   const wallet = useEmbeddedWallet('supplier', api);
@@ -53,17 +63,10 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
       .catch(() => undefined);
   };
 
-  useEffect(() => {
-    if (wallet.status !== 'ready' || !wallet.walletAddress) {
+  function refresh() {
+    if (!wallet.walletAddress) {
       return;
     }
-
-    const publicClient = getPublicClient(env);
-    publicClient
-      .getBalance({ address: wallet.walletAddress as `0x${string}` })
-      .then((value) => setBalance(formatEther(value)))
-      .catch(() => undefined);
-
     api
       .listAttestations()
       .then(setAttestations)
@@ -89,7 +92,26 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
       .then(setDestinationWallet)
       .catch(() => undefined);
     refreshEvidenceSubmissions();
+  }
+
+  useEffect(() => {
+    if (wallet.status !== 'ready' || !wallet.walletAddress) {
+      return;
+    }
+
+    getPublicClient(env)
+      .getBalance({ address: wallet.walletAddress as `0x${string}` })
+      .then((value) => setBalance(formatEther(value)))
+      .catch(() => undefined);
+
+    refresh();
   }, [api, env, wallet.status, wallet.walletAddress]);
+
+  useLiveStream(
+    wallet.status === 'ready' ? `${env.backendUrl}/api/events` : undefined,
+    LIVE_KINDS,
+    refresh,
+  );
 
   const mySubmissions = useMemo(
     () =>
@@ -157,7 +179,7 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
   };
 
   const handleRegisterDestination = () => {
-    if (!wallet.walletAddress) {
+    if (!wallet.walletAddress || !wallet.sessionToken) {
       return;
     }
     const validation = validateDestinationWallet({
@@ -171,12 +193,15 @@ export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient })
     setDestinationError(undefined);
     setSavingDestination(true);
     api
-      .registerDestinationWallet({
-        supplier: wallet.walletAddress,
-        chain: destinationChain,
-        address: destinationAddress,
-        ...(destinationX402ClaimUrl ? { x402ClaimUrl: destinationX402ClaimUrl } : {}),
-      })
+      .registerDestinationWallet(
+        {
+          supplier: wallet.walletAddress,
+          chain: destinationChain,
+          address: destinationAddress,
+          ...(destinationX402ClaimUrl ? { x402ClaimUrl: destinationX402ClaimUrl } : {}),
+        },
+        wallet.sessionToken,
+      )
       .then((record) => {
         setDestinationWallet(record);
         setEditingDestination(false);
