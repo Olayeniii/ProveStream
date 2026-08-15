@@ -19,7 +19,7 @@ import { NavLink } from 'react-router-dom';
 import styled from 'styled-components';
 import { formatUnits } from 'viem';
 
-import logo from '../assets/logo.png';
+import { LogoMark } from './LogoMark.js';
 import { Skeleton } from './Skeleton.js';
 import { UsdcIcon } from './UsdcIcon.js';
 import type { AppEnv } from '../env.js';
@@ -87,7 +87,7 @@ export function AppShell({
     <Page>
       <Sidebar>
         <Brand>
-          <Logo src={logo} alt="Provenance Streams" />
+          <LogoMark size={32} />
           <BrandText>Provenance Streams</BrandText>
         </Brand>
 
@@ -145,7 +145,7 @@ export function AppShell({
         <Footer>
           Powered by
           <ArcLogo
-            src="https://cdn.prod.website-files.com/685311a976e7c248b5dfde95/688f6e47d217527a8db50637_logo.webp"
+            src="https://cdn.prod.website-files.com/685311a976e7c248b5dfde95/688f6e47eca8d8e359537b5f_logo-ondark.svg"
             alt="Arc"
           />
         </Footer>
@@ -156,7 +156,7 @@ export function AppShell({
           <MobileNavPanel onClick={(event) => event.stopPropagation()}>
             <MobileNavHeader>
               <Brand>
-                <Logo src={logo} alt="Provenance Streams" />
+                <LogoMark size={32} />
                 <BrandText>Provenance Streams</BrandText>
               </Brand>
               <CloseButton
@@ -244,13 +244,6 @@ const Brand = styled.div`
   align-items: center;
   gap: 10px;
   padding: 0 8px;
-`;
-
-const Logo = styled.img`
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  object-fit: cover;
 `;
 
 const BrandText = styled.span`

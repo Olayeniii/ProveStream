@@ -233,7 +233,7 @@ export function LandingPage({ env, api }: { env: AppEnv; api: ApiClient }) {
           <PoweredBy>
             Powered by
             <ArcLogo
-              src="https://cdn.prod.website-files.com/685311a976e7c248b5dfde95/688f6e47d217527a8db50637_logo.webp"
+              src="https://cdn.prod.website-files.com/685311a976e7c248b5dfde95/688f6e47eca8d8e359537b5f_logo-ondark.svg"
               alt="Arc"
             />
           </PoweredBy>
