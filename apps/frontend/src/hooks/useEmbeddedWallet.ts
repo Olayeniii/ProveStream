@@ -11,6 +11,8 @@ export interface EmbeddedWalletState {
   status: EmbeddedWalletStatus;
   userId: string | undefined;
   walletAddress: string | undefined;
+  /** ProveStream's own session token (not Circle's `userToken`) — pass to any role-gated API call. */
+  sessionToken: string | undefined;
   error: string | undefined;
   login: (email: string) => void;
   logout: () => void;
@@ -40,7 +42,10 @@ function storageKey(role: string): string {
  * doesn't need to remember anything else — the wallet "persists across
  * sessions" by virtue of always resolving to the same Circle user.
  */
-export function useEmbeddedWallet(role: string, api: ApiClient): EmbeddedWalletState {
+export function useEmbeddedWallet(
+  role: 'auditor' | 'supplier',
+  api: ApiClient,
+): EmbeddedWalletState {
   const [status, setStatus] = useState<EmbeddedWalletStatus>('signed-out');
   const [session, setSession] = useState<WalletSession | undefined>(undefined);
   const [sdk, setSdk] = useState<W3SSdk | undefined>(undefined);
@@ -60,7 +65,7 @@ export function useEmbeddedWallet(role: string, api: ApiClient): EmbeddedWalletS
 
       void (async () => {
         try {
-          const newSession = await api.createWalletSession(userId);
+          const newSession = await api.createWalletSession(userId, role);
           setSession(newSession);
           const newSdk = createEmbeddedWalletSdk(newSession);
           setSdk(newSdk);
@@ -151,6 +156,7 @@ export function useEmbeddedWallet(role: string, api: ApiClient): EmbeddedWalletS
     status,
     userId: session?.userId,
     walletAddress,
+    sessionToken: session?.sessionToken,
     error,
     login,
     logout,

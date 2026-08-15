@@ -1,5 +1,8 @@
+import { EventEmitter } from 'node:events';
+
 import type {
   AgentHealth,
+  DecisionAnchor,
   DestinationWallet,
   EvidenceSubmission,
   FraudAlert,
@@ -12,42 +15,69 @@ import type {
   SettlementJobState,
   SignatureVerification,
   SignatureVerificationStatus,
+  StoreEvent,
+  StoreEventKind,
 } from '@provenance-streams/protocol';
+import type { Pool } from 'pg';
 import type { Address, Hex } from 'viem';
 import { keccak256, toHex } from 'viem';
 
-export interface AttestationRecord {
-  id: string;
-  supplier: Address;
-  auditor: Address;
-  policyId: string;
-  observedAt: string;
-  /** The `submitAttestation` transaction that produced this record — kept so a restart can (re-)run signature verification without needing a fresh chain scan. */
-  transactionHash: Hex;
-}
+import type { AttestationRecord } from './db/repositories/attestationsRepo.js';
+import { createAttestationsRepo } from './db/repositories/attestationsRepo.js';
+import { createDestinationWalletsRepo } from './db/repositories/destinationWalletsRepo.js';
+import { createEvidenceSubmissionsRepo } from './db/repositories/evidenceSubmissionsRepo.js';
+import { createFraudAlertsRepo } from './db/repositories/fraudAlertsRepo.js';
+import { createPaymentsRepo } from './db/repositories/paymentsRepo.js';
+import { createRiskAnalysesRepo } from './db/repositories/riskAnalysesRepo.js';
+import { createSettlementJobsRepo } from './db/repositories/settlementJobsRepo.js';
 
-const MAX_RECORDS = 200;
+export type { AttestationRecord } from './db/repositories/attestationsRepo.js';
 
 /**
- * In-memory read models for the dashboards, populated by the agent's hooks as
- * it observes on-chain events. This is a demo-scale substitute for a database:
- * it resets on restart and isn't shared across processes. Swapping in a real
- * store later only touches this file — `runAgent`'s hooks and the HTTP routes
- * that read from `Store` stay the same.
+ * Read models for the dashboards, populated by the agent's hooks as it
+ * observes on-chain events. Attestations/payments/evidence submissions/
+ * destination wallets/fraud alerts/settlement jobs/risk analyses persist to
+ * Postgres (see `db/repositories/`) so they survive a restart or redeploy.
+ * `signatureVerifications` stays in-memory only — genuinely cheap to
+ * rederive (it's a pure function of an already-confirmed transaction, no
+ * external API call), unlike risk analyses (a real AI call, previously also
+ * in-memory only — that meant a restart silently wiped real scores, since
+ * nothing re-runs analysis for already-attested items on boot).
  */
 export class Store {
-  private readonly attestations: AttestationRecord[] = [];
-  private readonly attestationIds = new Set<string>();
-  private readonly payments = new Map<string, Payment>();
-  private readonly evidenceSubmissions = new Map<Hex, EvidenceSubmission>();
-  private evidenceSubmissionSeq = 0;
-  private readonly riskAnalyses = new Map<string, RiskAnalysis>();
+  private readonly attestationsRepo;
+  private readonly paymentsRepo;
+  private readonly evidenceSubmissionsRepo;
+  private readonly destinationWalletsRepo;
+  private readonly fraudAlertsRepo;
+  private readonly settlementJobsRepo;
+  private readonly riskAnalysesRepo;
   private readonly signatureVerifications = new Map<string, SignatureVerification>();
-  private readonly destinationWallets = new Map<Address, DestinationWallet>();
-  private readonly fraudAlerts = new Map<string, FraudAlert>();
-  private readonly settlementJobs = new Map<string, SettlementJobRecord>();
   private lastEventAt: string | undefined;
   private treasuryMode = 'local';
+  private readonly emitter = new EventEmitter();
+
+  constructor(pool: Pool) {
+    this.attestationsRepo = createAttestationsRepo(pool);
+    this.paymentsRepo = createPaymentsRepo(pool);
+    this.evidenceSubmissionsRepo = createEvidenceSubmissionsRepo(pool);
+    this.destinationWalletsRepo = createDestinationWalletsRepo(pool);
+    this.fraudAlertsRepo = createFraudAlertsRepo(pool);
+    this.settlementJobsRepo = createSettlementJobsRepo(pool);
+    this.riskAnalysesRepo = createRiskAnalysesRepo(pool);
+  }
+
+  /** Subscribes to every mutation across all entities; returns an unsubscribe function. Powers the SSE routes in `server.ts` — nothing else should call this. */
+  onChange(listener: (event: StoreEvent) => void): () => void {
+    this.emitter.on('change', listener);
+    return () => {
+      this.emitter.off('change', listener);
+    };
+  }
+
+  private emitChange(kind: StoreEventKind): void {
+    this.emitter.emit('change', { kind } satisfies StoreEvent);
+  }
 
   /**
    * Idempotent by `id`: both the live watcher and `HistoryService`'s startup
@@ -55,42 +85,31 @@ export class Store {
    * their block ranges overlap, and this makes calling it twice a no-op
    * rather than a duplicate dashboard row.
    */
-  addAttestation(record: AttestationRecord): void {
-    if (this.attestationIds.has(record.id)) {
-      return;
+  async addAttestation(record: AttestationRecord): Promise<void> {
+    const wasNew = await this.attestationsRepo.insertIfNew(record);
+    if (wasNew) {
+      this.lastEventAt = new Date().toISOString();
+      this.emitChange('attestation');
     }
-    this.attestationIds.add(record.id);
-    this.attestations.unshift(record);
-    this.attestations.length = Math.min(this.attestations.length, MAX_RECORDS);
-    this.lastEventAt = new Date().toISOString();
   }
 
-  listAttestations(): AttestationRecord[] {
-    return this.attestations;
+  listAttestations(): Promise<AttestationRecord[]> {
+    return this.attestationsRepo.list();
   }
 
-  createPendingPayment(input: {
+  async createPendingPayment(input: {
     rewardId: string;
     attestationId: string;
     supplier: Address;
     policyId: string;
     rewardAmount: string;
-  }): void {
-    const now = new Date().toISOString();
-    this.payments.set(input.rewardId, {
-      rewardId: input.rewardId,
-      attestationId: input.attestationId,
-      supplier: input.supplier,
-      policyId: input.policyId,
-      rewardAmount: input.rewardAmount,
-      status: 'pending',
-      createdAt: now,
-      updatedAt: now,
-    });
-    this.lastEventAt = now;
+  }): Promise<void> {
+    this.lastEventAt = new Date().toISOString();
+    await this.paymentsRepo.createPending(input);
+    this.emitChange('payment');
   }
 
-  updatePaymentStatus(
+  async updatePaymentStatus(
     rewardId: string,
     status: PaymentStatus,
     extra?: {
@@ -100,32 +119,13 @@ export class Store {
       destinationChain?: string | undefined;
       destinationTxHash?: Hex;
     },
-  ): void {
-    const payment = this.payments.get(rewardId);
-    if (!payment) {
-      return;
-    }
-    payment.status = status;
-    payment.updatedAt = new Date().toISOString();
-    if (extra?.txHash) {
-      payment.txHash = extra.txHash;
-    }
-    if (extra?.error) {
-      payment.error = extra.error;
-    }
-    if (extra?.bridged) {
-      payment.bridged = extra.bridged;
-    }
-    if (extra?.destinationChain) {
-      payment.destinationChain = extra.destinationChain;
-    }
-    if (extra?.destinationTxHash) {
-      payment.destinationTxHash = extra.destinationTxHash;
-    }
+  ): Promise<void> {
+    await this.paymentsRepo.updateStatus(rewardId, status, extra);
+    this.emitChange('payment');
   }
 
-  listPayments(): Payment[] {
-    return [...this.payments.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  listPayments(): Promise<Payment[]> {
+    return this.paymentsRepo.list();
   }
 
   /**
@@ -134,72 +134,46 @@ export class Store {
    * auditor's later "Attest" action can reuse this exact `proofHash` instead
    * of re-hashing. Duplicate proof hashes are already rejected on-chain, so
    * this can't collide across two genuinely different submissions — a retry
-   * of the same text just overwrites its own still-pending record.
+   * of the same text just overwrites its own still-pending record (enforced
+   * by the table's `UNIQUE (proof_hash)` constraint plus the caller retrying
+   * `getByProofHash` first, same as before).
    */
-  createEvidenceSubmission(input: {
+  async createEvidenceSubmission(input: {
     supplier: Address;
     policyId: string;
     evidenceText: string;
-  }): EvidenceSubmission {
+  }): Promise<EvidenceSubmission> {
     const proofHash = keccak256(toHex(input.evidenceText));
-    const now = new Date().toISOString();
-    this.evidenceSubmissionSeq += 1;
-    const record: EvidenceSubmission = {
-      id: this.evidenceSubmissionSeq.toString(),
-      supplier: input.supplier,
-      policyId: input.policyId,
-      proofHash,
-      evidenceText: input.evidenceText,
-      status: 'pending',
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.evidenceSubmissions.set(proofHash, record);
+    const record = await this.evidenceSubmissionsRepo.create({ ...input, proofHash });
+    this.emitChange('evidence-submission');
     return record;
   }
 
   /** Non-destructive — a submission stays queryable after an auditor attests to it. */
-  getEvidenceSubmission(proofHash: Hex): EvidenceSubmission | undefined {
-    return this.evidenceSubmissions.get(proofHash);
+  getEvidenceSubmission(proofHash: Hex): Promise<EvidenceSubmission | undefined> {
+    return this.evidenceSubmissionsRepo.getByProofHash(proofHash);
   }
 
-  listEvidenceSubmissions(status?: EvidenceSubmission['status']): EvidenceSubmission[] {
-    const all = [...this.evidenceSubmissions.values()].sort((a, b) =>
-      b.createdAt.localeCompare(a.createdAt),
-    );
-    return status ? all.filter((entry) => entry.status === status) : all;
+  listEvidenceSubmissions(status?: EvidenceSubmission['status']): Promise<EvidenceSubmission[]> {
+    return this.evidenceSubmissionsRepo.list(status);
   }
 
-  markEvidenceAttested(proofHash: Hex, attestationId: string): void {
-    const record = this.evidenceSubmissions.get(proofHash);
-    if (!record || record.status !== 'pending') {
-      return;
-    }
-    record.status = 'attested';
-    record.attestationId = attestationId;
-    record.updatedAt = new Date().toISOString();
+  async markEvidenceAttested(proofHash: Hex, attestationId: string): Promise<void> {
+    await this.evidenceSubmissionsRepo.markAttested(proofHash, attestationId);
+    this.emitChange('evidence-submission');
   }
 
-  markEvidenceRejected(proofHash: Hex): void {
-    const record = this.evidenceSubmissions.get(proofHash);
-    if (!record || record.status !== 'pending') {
-      return;
-    }
-    record.status = 'rejected';
-    record.updatedAt = new Date().toISOString();
+  async markEvidenceRejected(proofHash: Hex): Promise<void> {
+    await this.evidenceSubmissionsRepo.markRejected(proofHash);
+    this.emitChange('evidence-submission');
   }
 
-  createPendingRiskAnalysis(attestationId: string): void {
-    const now = new Date().toISOString();
-    this.riskAnalyses.set(attestationId, {
-      attestationId,
-      status: 'pending',
-      createdAt: now,
-      updatedAt: now,
-    });
+  async createPendingRiskAnalysis(attestationId: string): Promise<void> {
+    await this.riskAnalysesRepo.createPending(attestationId);
+    this.emitChange('risk-analysis');
   }
 
-  updateRiskAnalysisStatus(
+  async updateRiskAnalysisStatus(
     attestationId: string,
     status: RiskAnalysisStatus,
     extra?: {
@@ -209,36 +183,17 @@ export class Store {
       provider?: string;
       error?: string;
     },
-  ): void {
-    const analysis = this.riskAnalyses.get(attestationId);
-    if (!analysis) {
-      return;
-    }
-    analysis.status = status;
-    analysis.updatedAt = new Date().toISOString();
-    if (extra?.score !== undefined) {
-      analysis.score = extra.score;
-    }
-    if (extra?.confidence !== undefined) {
-      analysis.confidence = extra.confidence;
-    }
-    if (extra?.summary) {
-      analysis.summary = extra.summary;
-    }
-    if (extra?.provider) {
-      analysis.provider = extra.provider;
-    }
-    if (extra?.error) {
-      analysis.error = extra.error;
-    }
+  ): Promise<void> {
+    await this.riskAnalysesRepo.updateStatus(attestationId, status, extra);
+    this.emitChange('risk-analysis');
   }
 
-  listRiskAnalyses(): RiskAnalysis[] {
-    return [...this.riskAnalyses.values()];
+  listRiskAnalyses(): Promise<RiskAnalysis[]> {
+    return this.riskAnalysesRepo.list();
   }
 
-  getRiskAnalysis(attestationId: string): RiskAnalysis | undefined {
-    return this.riskAnalyses.get(attestationId);
+  getRiskAnalysis(attestationId: string): Promise<RiskAnalysis | undefined> {
+    return this.riskAnalysesRepo.get(attestationId);
   }
 
   createPendingSignatureVerification(attestationId: string): void {
@@ -249,6 +204,7 @@ export class Store {
       createdAt: now,
       updatedAt: now,
     });
+    this.emitChange('signature-verification');
   }
 
   updateSignatureVerificationStatus(
@@ -271,6 +227,7 @@ export class Store {
     if (extra?.error) {
       record.error = extra.error;
     }
+    this.emitChange('signature-verification');
   }
 
   getSignatureVerification(attestationId: string): SignatureVerification | undefined {
@@ -285,29 +242,23 @@ export class Store {
     this.treasuryMode = mode;
   }
 
-  registerDestinationWallet(input: {
+  async registerDestinationWallet(input: {
     supplier: Address;
-    chain: string;
     /** Not always `0x`-prefixed — Solana destinations use base58. */
+    chain: string;
     address: string;
     x402ClaimUrl?: string | undefined;
-  }): DestinationWallet {
-    const record: DestinationWallet = {
-      supplier: input.supplier,
-      chain: input.chain,
-      address: input.address,
-      registeredAt: new Date().toISOString(),
-      ...(input.x402ClaimUrl !== undefined ? { x402ClaimUrl: input.x402ClaimUrl } : {}),
-    };
-    this.destinationWallets.set(input.supplier, record);
+  }): Promise<DestinationWallet> {
+    const record = await this.destinationWalletsRepo.register(input);
+    this.emitChange('destination-wallet');
     return record;
   }
 
-  getDestinationWallet(supplier: Address): DestinationWallet | undefined {
-    return this.destinationWallets.get(supplier);
+  getDestinationWallet(supplier: Address): Promise<DestinationWallet | undefined> {
+    return this.destinationWalletsRepo.get(supplier);
   }
 
-  createFraudAlert(input: {
+  async createFraudAlert(input: {
     rewardId: string;
     attestationId: string;
     supplier: Address;
@@ -315,110 +266,57 @@ export class Store {
     rewardAmount: string;
     score: number;
     reasons: string[];
-  }): void {
-    const now = new Date().toISOString();
-    this.fraudAlerts.set(input.rewardId, {
-      ...input,
-      status: 'flagged',
-      createdAt: now,
-      updatedAt: now,
-    });
+  }): Promise<void> {
+    await this.fraudAlertsRepo.create(input);
+    this.emitChange('fraud-alert');
   }
 
-  getFraudAlert(rewardId: string): FraudAlert | undefined {
-    return this.fraudAlerts.get(rewardId);
+  getFraudAlert(rewardId: string): Promise<FraudAlert | undefined> {
+    return this.fraudAlertsRepo.get(rewardId);
   }
 
-  updateFraudAlertStatus(rewardId: string, status: FraudAlertStatus): void {
-    const alert = this.fraudAlerts.get(rewardId);
-    if (!alert) {
-      return;
-    }
-    alert.status = status;
-    alert.updatedAt = new Date().toISOString();
+  async updateFraudAlertStatus(rewardId: string, status: FraudAlertStatus): Promise<void> {
+    await this.fraudAlertsRepo.updateStatus(rewardId, status);
+    this.emitChange('fraud-alert');
   }
 
-  listFraudAlerts(): FraudAlert[] {
-    return [...this.fraudAlerts.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  /** Tracks whether this alert's resolution has been anchored on `DecisionRegistry` (see `DecisionAnchorService`). */
+  async updateFraudAlertAnchor(
+    rewardId: string,
+    status: DecisionAnchor['status'],
+    txHash?: Hex,
+  ): Promise<void> {
+    await this.fraudAlertsRepo.updateAnchor(rewardId, status, txHash);
+    this.emitChange('fraud-alert');
   }
 
-  updateSettlementJobState(
+  listFraudAlerts(): Promise<FraudAlert[]> {
+    return this.fraudAlertsRepo.list();
+  }
+
+  async updateSettlementJobState(
     rewardId: string,
     state: SettlementJobState,
     extra?: { attempt?: number | undefined; error?: string | undefined },
-  ): void {
-    this.settlementJobs.set(rewardId, {
-      rewardId,
-      state,
-      attempt: extra?.attempt,
-      error: extra?.error,
-      updatedAt: new Date().toISOString(),
-    });
+  ): Promise<void> {
+    await this.settlementJobsRepo.updateState(rewardId, state, extra);
+    this.emitChange('settlement-job');
   }
 
-  listSettlementJobs(): SettlementJobRecord[] {
-    return [...this.settlementJobs.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  listSettlementJobs(): Promise<SettlementJobRecord[]> {
+    return this.settlementJobsRepo.list();
   }
 
-  getAgentHealth(): AgentHealth {
+  async getAgentHealth(): Promise<AgentHealth> {
+    const [queueDepth, pendingFraudAlerts] = await Promise.all([
+      this.settlementJobsRepo.queueDepth(),
+      this.fraudAlertsRepo.pendingCount(),
+    ]);
     return {
-      queueDepth: [...this.settlementJobs.values()].filter(
-        (job) => job.state === 'queued' || job.state === 'processing' || job.state === 'retrying',
-      ).length,
+      queueDepth,
       treasuryMode: this.treasuryMode,
       lastEventAt: this.lastEventAt,
-      pendingFraudAlerts: [...this.fraudAlerts.values()].filter(
-        (alert) => alert.status === 'flagged',
-      ).length,
+      pendingFraudAlerts,
     };
-  }
-
-  /** Plain-JSON view of everything worth surviving a restart — see `snapshotStore.ts`. */
-  toSnapshotData(): {
-    attestations: AttestationRecord[];
-    payments: Payment[];
-    fraudAlerts: FraudAlert[];
-    settlementJobs: SettlementJobRecord[];
-    destinationWallets: DestinationWallet[];
-    evidenceSubmissions: EvidenceSubmission[];
-  } {
-    return {
-      attestations: this.attestations,
-      payments: [...this.payments.values()],
-      fraudAlerts: [...this.fraudAlerts.values()],
-      settlementJobs: [...this.settlementJobs.values()],
-      destinationWallets: [...this.destinationWallets.values()],
-      evidenceSubmissions: [...this.evidenceSubmissions.values()],
-    };
-  }
-
-  /** Repopulates the store from a previous `toSnapshotData()` — call once, right after construction, before anything else touches the store. */
-  restore(data: {
-    attestations: AttestationRecord[];
-    payments: Payment[];
-    fraudAlerts: FraudAlert[];
-    settlementJobs: SettlementJobRecord[];
-    destinationWallets: DestinationWallet[];
-    evidenceSubmissions?: EvidenceSubmission[];
-  }): void {
-    for (const attestation of [...data.attestations].reverse()) {
-      this.addAttestation(attestation);
-    }
-    for (const payment of data.payments) {
-      this.payments.set(payment.rewardId, payment);
-    }
-    for (const alert of data.fraudAlerts) {
-      this.fraudAlerts.set(alert.rewardId, alert);
-    }
-    for (const job of data.settlementJobs) {
-      this.settlementJobs.set(job.rewardId, job);
-    }
-    for (const wallet of data.destinationWallets) {
-      this.destinationWallets.set(wallet.supplier, wallet);
-    }
-    for (const submission of data.evidenceSubmissions ?? []) {
-      this.evidenceSubmissions.set(submission.proofHash, submission);
-      this.evidenceSubmissionSeq = Math.max(this.evidenceSubmissionSeq, Number(submission.id) || 0);
-    }
   }
 }

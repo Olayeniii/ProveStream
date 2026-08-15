@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import styled from 'styled-components';
 
-import logo from '../assets/logo.png';
+import { LogoLockup, LogoMark } from '../components/LogoMark.js';
 import { StreamOrb } from '../components/pipeline/StreamOrb.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
@@ -78,7 +78,7 @@ export function LandingPage({ env, api }: { env: AppEnv; api: ApiClient }) {
     <Page>
       <NavBar>
         <Brand>
-          <BrandLogo src={logo} alt="Provenance Streams" />
+          <LogoMark size={28} />
           <BrandText>
             Provenance<Accent>Streams</Accent>
           </BrandText>
@@ -143,7 +143,83 @@ export function LandingPage({ env, api }: { env: AppEnv; api: ApiClient }) {
         ))}
       </StatsStrip>
 
+      <Process>
+        <ProcessHead>
+          <Eyebrow>The pipeline</Eyebrow>
+          <ProcessTitle>Every reward is traced, verified, and settled in the open.</ProcessTitle>
+        </ProcessHead>
+        <ProcessRow>
+          <ProcessStep>
+            <StepMark>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M12 3L20 7V12C20 16.5 16.5 20.2 12 21C7.5 20.2 4 16.5 4 12V7L12 3Z"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                />
+              </svg>
+            </StepMark>
+            <StepTitle>Attest</StepTitle>
+            <StepCopy>
+              A field auditor signs a gas-sponsored attestation, recorded on-chain against a real
+              policy.
+            </StepCopy>
+          </ProcessStep>
+          <ProcessLink aria-hidden="true">
+            <svg viewBox="0 0 28 10" fill="none">
+              <path d="M0 5H27M27 5L22 1M27 5L22 9" stroke="currentColor" strokeWidth="1" />
+            </svg>
+          </ProcessLink>
+          <ProcessStep>
+            <StepMark>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M8.5 12.3L10.8 14.6L15.5 9.4"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.4" />
+              </svg>
+            </StepMark>
+            <StepTitle>Verify</StepTitle>
+            <StepCopy>
+              An independent signature check and an AI risk review look at the evidence — anything
+              flagged waits for a human.
+            </StepCopy>
+          </ProcessStep>
+          <ProcessLink aria-hidden="true">
+            <svg viewBox="0 0 28 10" fill="none">
+              <path d="M0 5H27M27 5L22 1M27 5L22 9" stroke="currentColor" strokeWidth="1" />
+            </svg>
+          </ProcessLink>
+          <ProcessStep>
+            <StepMark>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M4 12H20M4 12L9 7M4 12L9 17"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle cx="20" cy="12" r="2.2" fill="currentColor" />
+              </svg>
+            </StepMark>
+            <StepTitle>Settle</StepTitle>
+            <StepCopy>
+              Circle Gateway clears the reward — same-chain or bridged via CCTP — no invoice, no
+              queue.
+            </StepCopy>
+          </ProcessStep>
+        </ProcessRow>
+      </Process>
+
       <PageFooter>
+        <FooterLockup>
+          <LogoLockup width={170} />
+        </FooterLockup>
         <FooterBottom>
           <span>© {new Date().getFullYear()} Provenance Streams</span>
           <FooterIconLink
@@ -157,7 +233,7 @@ export function LandingPage({ env, api }: { env: AppEnv; api: ApiClient }) {
           <PoweredBy>
             Powered by
             <ArcLogo
-              src="https://cdn.prod.website-files.com/685311a976e7c248b5dfde95/688f6e47d217527a8db50637_logo.webp"
+              src="https://cdn.prod.website-files.com/685311a976e7c248b5dfde95/688f6e47eca8d8e359537b5f_logo-ondark.svg"
               alt="Arc"
             />
           </PoweredBy>
@@ -170,7 +246,7 @@ export function LandingPage({ env, api }: { env: AppEnv; api: ApiClient }) {
 const Page = styled.div`
   display: flex;
   flex-direction: column;
-  background: ${(props) => props.theme.colors.background};
+  background: ${(props) => props.theme.brand.bg};
 `;
 
 const NavBar = styled.nav`
@@ -178,7 +254,7 @@ const NavBar = styled.nav`
   align-items: center;
   gap: 24px;
   padding: 16px 32px;
-  border-bottom: 1px solid ${(props) => props.theme.colors.border};
+  border-bottom: 1px solid ${(props) => props.theme.brand.line};
 
   @media (max-width: 480px) {
     gap: 12px;
@@ -193,21 +269,11 @@ const Brand = styled.div`
   flex-shrink: 0;
 `;
 
-const BrandLogo = styled.img`
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-
-  @media (max-width: 480px) {
-    width: 22px;
-    height: 22px;
-  }
-`;
-
 const BrandText = styled.span`
-  font-weight: 700;
+  font-family: ${(props) => props.theme.displayFontFamily};
+  font-weight: 600;
   font-size: 1rem;
-  color: ${(props) => props.theme.colors.text};
+  color: ${(props) => props.theme.brand.text};
 
   @media (max-width: 480px) {
     font-size: 0.85rem;
@@ -215,7 +281,7 @@ const BrandText = styled.span`
 `;
 
 const Accent = styled.span`
-  color: ${(props) => props.theme.colors.primary};
+  color: ${(props) => props.theme.brand.accent};
 `;
 
 const NavLinks = styled.div`
@@ -230,12 +296,12 @@ const NavLinks = styled.div`
 
 const NavAnchorLink = styled(Link)`
   font-size: 0.88rem;
-  color: ${(props) => props.theme.colors.textMuted};
+  color: ${(props) => props.theme.brand.textMuted};
   text-decoration: none;
   white-space: nowrap;
 
   &:hover {
-    color: ${(props) => props.theme.colors.text};
+    color: ${(props) => props.theme.brand.text};
   }
 
   @media (max-width: 480px) {
@@ -246,14 +312,20 @@ const NavAnchorLink = styled(Link)`
 const LaunchButtonSmall = styled.a`
   padding: 8px 16px;
   border-radius: ${(props) => props.theme.radius.pill};
-  background: ${(props) => props.theme.colors.primary};
-  color: ${(props) => props.theme.colors.primaryText};
+  background: ${(props) => props.theme.brand.accent};
+  color: ${(props) => props.theme.brand.text};
   font-size: 0.85rem;
   font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
   flex-shrink: 0;
-  transition: transform 160ms ease-out;
+  transition:
+    filter 160ms ease-out,
+    transform 160ms ease-out;
+
+  &:hover {
+    filter: brightness(1.15);
+  }
 
   @media (max-width: 480px) {
     padding: 8px 12px;
@@ -297,9 +369,9 @@ const BackgroundRings = styled.div`
 
   svg circle {
     fill: none;
-    stroke: ${(props) => props.theme.colors.slate};
+    stroke: ${(props) => props.theme.brand.textMuted};
     stroke-width: 0.4;
-    stroke-opacity: 0.12;
+    stroke-opacity: 0.14;
   }
 
   @media (max-width: 860px) {
@@ -323,27 +395,27 @@ const Headline = styled.h1`
   margin: 0;
   font-family: ${(props) => props.theme.displayFontFamily};
   font-size: clamp(2.1rem, 3.6vw, 2.9rem);
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.2;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   text-align: left;
-  color: ${(props) => props.theme.colors.text};
+  color: ${(props) => props.theme.brand.text};
 
   @media (max-width: 860px) {
     text-align: center;
   }
 `;
 
-// One accent, matching the Orb's own gold — not a rainbow per word.
+// One accent, matching the Orb's own — not a rainbow per word.
 const HAccent = styled.span`
-  color: ${(props) => props.theme.streamKit.reward};
+  color: ${(props) => props.theme.brand.accent};
 `;
 
 const Tagline = styled.p`
   margin: 0;
   font-size: 1.02rem;
   line-height: 1.6;
-  color: ${(props) => props.theme.colors.textMuted};
+  color: ${(props) => props.theme.brand.textMuted};
 
   @media (max-width: 860px) {
     text-align: center;
@@ -362,13 +434,19 @@ const PrimaryCta = styled.a`
   gap: 8px;
   padding: 14px 26px;
   border-radius: ${(props) => props.theme.radius.pill};
-  background: ${(props) => props.theme.colors.primary};
-  color: ${(props) => props.theme.colors.primaryText};
+  background: ${(props) => props.theme.brand.accent};
+  color: ${(props) => props.theme.brand.text};
   font-size: 0.95rem;
   font-weight: 700;
   text-decoration: none;
   white-space: nowrap;
-  transition: transform 160ms ease-out;
+  transition:
+    filter 160ms ease-out,
+    transform 160ms ease-out;
+
+  &:hover {
+    filter: brightness(1.15);
+  }
 
   &:active {
     transform: scale(0.97);
@@ -386,9 +464,9 @@ const SecondaryCta = styled(Link)`
   gap: 8px;
   padding: 14px 26px;
   border-radius: ${(props) => props.theme.radius.pill};
-  border: 1px solid ${(props) => props.theme.colors.border};
+  border: 1px solid ${(props) => props.theme.brand.line};
   background: transparent;
-  color: ${(props) => props.theme.colors.text};
+  color: ${(props) => props.theme.brand.text};
   font-size: 0.95rem;
   font-weight: 600;
   text-decoration: none;
@@ -423,7 +501,7 @@ const StatItem = styled.div`
   align-items: baseline;
   gap: 6px;
   padding: 4px 20px;
-  border-left: 1px solid ${(props) => props.theme.colors.border};
+  border-left: 1px solid ${(props) => props.theme.brand.line};
 
   &:first-child {
     border-left: none;
@@ -431,7 +509,7 @@ const StatItem = styled.div`
 
   @media (max-width: 640px) {
     border-left: none;
-    border-top: 1px solid ${(props) => props.theme.colors.border};
+    border-top: 1px solid ${(props) => props.theme.brand.line};
     justify-content: center;
     padding: 10px 0;
 
@@ -451,31 +529,140 @@ const LiveDot = styled.span`
 
 const StatItemLabel = styled.span`
   font-size: 0.78rem;
-  color: ${(props) => props.theme.colors.textMuted};
+  color: ${(props) => props.theme.brand.textMuted};
 `;
 
 const StatItemValue = styled.span`
   font-size: 0.9rem;
   font-weight: 600;
   font-family: ${(props) => props.theme.monoFontFamily};
-  color: ${(props) => props.theme.colors.text};
+  color: ${(props) => props.theme.brand.text};
+`;
+
+const Process = styled.section`
+  padding: clamp(72px, 9vw, 120px) clamp(24px, 5vw, 72px);
+  border-top: 1px solid ${(props) => props.theme.brand.line};
+`;
+
+const ProcessHead = styled.div`
+  max-width: 640px;
+  margin: 0 auto 64px;
+  text-align: center;
+`;
+
+const Eyebrow = styled.div`
+  font-family: ${(props) => props.theme.displayFontFamily};
+  font-weight: 600;
+  font-size: 12.5px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: ${(props) => props.theme.brand.textMuted};
+  margin-bottom: 16px;
+`;
+
+const ProcessTitle = styled.h2`
+  margin: 0;
+  font-family: ${(props) => props.theme.displayFontFamily};
+  font-weight: 600;
+  font-size: clamp(1.5rem, 3vw, 2.1rem);
+  line-height: 1.2;
+  color: ${(props) => props.theme.brand.text};
+`;
+
+const ProcessRow = styled.div`
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  align-items: start;
+  max-width: 1000px;
+  margin: 0 auto;
+
+  @media (max-width: 800px) {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+`;
+
+const ProcessStep = styled.div`
+  text-align: center;
+  padding: 0 12px;
+`;
+
+const StepMark = styled.div`
+  width: 68px;
+  height: 68px;
+  margin: 0 auto 22px;
+  background: ${(props) => props.theme.brand.panel};
+  border: 1px solid ${(props) => props.theme.brand.line};
+  clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: ${(props) => props.theme.brand.accent};
+
+  svg {
+    width: 26px;
+    height: 26px;
+  }
+`;
+
+const StepTitle = styled.h3`
+  font-family: ${(props) => props.theme.displayFontFamily};
+  font-weight: 600;
+  font-size: 1.1rem;
+  margin: 0 0 10px;
+  color: ${(props) => props.theme.brand.text};
+`;
+
+const StepCopy = styled.p`
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: ${(props) => props.theme.brand.textMuted};
+  max-width: 26ch;
+  margin-inline: auto;
+`;
+
+const ProcessLink = styled.div`
+  display: flex;
+  align-items: center;
+  padding-top: 34px;
+  color: ${(props) => props.theme.brand.line};
+
+  svg {
+    width: 28px;
+    height: 10px;
+  }
+
+  @media (max-width: 800px) {
+    display: none;
+  }
 `;
 
 const PageFooter = styled.footer`
-  border-top: 1px solid ${(props) => props.theme.colors.border};
-  padding: 24px 48px;
+  border-top: 1px solid ${(props) => props.theme.brand.line};
+  padding: 40px 48px 28px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
 
   @media (max-width: 640px) {
-    padding: 20px 24px;
+    padding: 32px 24px 24px;
+    align-items: flex-start;
   }
+`;
+
+const FooterLockup = styled.div`
+  display: flex;
 `;
 
 const FooterIconLink = styled.a`
   display: flex;
-  color: ${(props) => props.theme.colors.textMuted};
+  color: ${(props) => props.theme.brand.textMuted};
 
   &:hover {
-    color: ${(props) => props.theme.colors.text};
+    color: ${(props) => props.theme.brand.text};
   }
 `;
 
@@ -484,7 +671,7 @@ const FooterBottom = styled.div`
   align-items: center;
   gap: 20px;
   font-size: 0.78rem;
-  color: ${(props) => props.theme.colors.textMuted};
+  color: ${(props) => props.theme.brand.textMuted};
 
   @media (max-width: 640px) {
     flex-wrap: wrap;

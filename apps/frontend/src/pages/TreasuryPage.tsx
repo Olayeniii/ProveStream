@@ -5,6 +5,7 @@ import styled from 'styled-components';
 import { AppShell } from '../components/AppShell.js';
 import { Skeleton } from '../components/Skeleton.js';
 import { UsdcIcon } from '../components/UsdcIcon.js';
+import { useLiveStream } from '../hooks/useLiveStream.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, TreasuryBalance } from '../lib/api.js';
 import { formatAmount, formatReward } from '../lib/format.js';
@@ -17,11 +18,15 @@ const PAYMENT_STATUS_TONE: Record<Payment['status'], StreamTone> = {
   pending: 'neutral',
 };
 
+// Not a Store entity, but a settlement is exactly when the balance moves —
+// refetch it alongside payments on the same signal.
+const LIVE_KINDS = ['payment'] as const;
+
 export function TreasuryPage({ env, api }: { env: AppEnv; api: ApiClient }) {
   const [treasury, setTreasury] = useState<TreasuryBalance | undefined>(undefined);
   const [payments, setPayments] = useState<Payment[]>([]);
 
-  useEffect(() => {
+  function refresh() {
     api
       .getTreasuryBalance()
       .then(setTreasury)
@@ -30,7 +35,10 @@ export function TreasuryPage({ env, api }: { env: AppEnv; api: ApiClient }) {
       .listPayments()
       .then(setPayments)
       .catch(() => undefined);
-  }, [api]);
+  }
+
+  useEffect(refresh, [api]);
+  useLiveStream(`${env.backendUrl}/api/events`, LIVE_KINDS, refresh);
 
   return (
     <AppShell title="Treasury" subtitle="Balance and recent settlements" env={env} api={api}>

@@ -5,6 +5,7 @@ import { parseEventLogs, parseUnits } from 'viem';
 import styled from 'styled-components';
 
 import { AppShell } from '../components/AppShell.js';
+import { ADMIN_SESSION_STORAGE_KEY } from '../lib/adminSession.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, PolicySummary } from '../lib/api.js';
 import { formatReward } from '../lib/format.js';
@@ -58,8 +59,19 @@ export function PoliciesPage({ env, api }: { env: AppEnv; api: ApiClient }) {
         eventName: 'PolicyCreated',
         logs: receipt.logs,
       });
-      if (created) {
-        await api.registerKnownPolicy(created.args.id.toString()).catch(() => undefined);
+      // This page uses the injected-wallet flow (policy creation is
+      // Ownable-gated on-chain, so only an admin's own wallet can succeed
+      // here anyway), not the embedded-wallet session system — so there's
+      // no session of its own to reuse. Opportunistically reuse an admin
+      // session already established via AdminDashboard's login in this same
+      // browser tab; if there isn't one, skip the cache-priming call
+      // entirely and let the normal incremental scan pick the policy up
+      // later, same as before this endpoint required a session at all.
+      const adminSessionToken = sessionStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
+      if (created && adminSessionToken) {
+        await api
+          .registerKnownPolicy(created.args.id.toString(), adminSessionToken)
+          .catch(() => undefined);
       }
 
       setRefreshCount((count) => count + 1);

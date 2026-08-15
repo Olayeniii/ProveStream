@@ -8,19 +8,25 @@
     "clean": "rm -rf dist",
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@circle-fin/user-controlled-wallets": "10.8.0",
     "@provenance-streams/agent": "*",
+    "@provenance-streams/logger": "*",
     "@provenance-streams/protocol": "*",
+    "@types/pg": "8.21.0",
     "cors": "2.8.6",
     "express": "5.2.1",
+    "express-rate-limit": "8.6.2",
+    "pg": "8.23.0",
     "viem": "2.55.8",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/cors": "2.8.19",
-    "@types/express": "5.0.6"
+    "@types/express": "5.0.6",
+    "vitest": "4.1.10"
   }
 }

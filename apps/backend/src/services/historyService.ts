@@ -1,8 +1,11 @@
+import { createLogger } from '@provenance-streams/logger';
 import { attestationRegistryAbi, rewardDispatcherAbi } from '@provenance-streams/protocol';
 import type { Address, Hex } from 'viem';
 import { createPublicClient, decodeFunctionData, http } from 'viem';
 
 import { summarizeRpcError, withRpcRetries } from './rpcRetry.js';
+
+const logger = createLogger('historyService');
 
 // Comfortably under the 10,000-block range many public RPC providers (including
 // Arc testnet's) enforce per `eth_getLogs` call — same limit `PolicyService` works around.
@@ -79,9 +82,9 @@ interface ScannedLog {
  * testnet's public RPC rate-limits harder than its per-call block-range cap
  * alone suggests), it stops and returns whatever it found plus the block it
  * got to, instead of throwing — the caller persists that progress
- * (`snapshotStore.ts`) and resumes from there on the next call, so repeated
- * restarts converge on full history instead of each one re-paying the same
- * RPC cost and none of them finishing.
+ * (`db/repositories/chainScanProgressRepo.ts`) and resumes from there on the
+ * next call, so repeated restarts converge on full history instead of each
+ * one re-paying the same RPC cost and none of them finishing.
  *
  * A real limitation this can't paper over: whether a historical reward
  * actually *settled* isn't recoverable from chain at all — settlement is an
@@ -216,8 +219,8 @@ export class HistoryService {
           }),
         );
       } catch (error) {
-        console.error(
-          `HistoryService: stopped scanning ${params.eventName} at block ${start.toString()} (resumes here next run): ${summarizeRpcError(error)}`,
+        logger.error(
+          `stopped scanning ${params.eventName} at block ${start.toString()} (resumes here next run): ${summarizeRpcError(error)}`,
         );
         break;
       }

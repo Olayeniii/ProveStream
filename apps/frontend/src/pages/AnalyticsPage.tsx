@@ -5,10 +5,13 @@ import { formatUnits } from 'viem';
 
 import { AppShell } from '../components/AppShell.js';
 import { UsdcIcon } from '../components/UsdcIcon.js';
+import { useLiveStream } from '../hooks/useLiveStream.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
 import { formatAmount } from '../lib/format.js';
 import { buildStreams, getOverallStatus } from '../lib/streams.js';
+
+const LIVE_KINDS = ['attestation', 'payment', 'risk-analysis', 'signature-verification'] as const;
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) {
@@ -27,7 +30,7 @@ export function AnalyticsPage({ env, api }: { env: AppEnv; api: ApiClient }) {
   const [riskAnalyses, setRiskAnalyses] = useState<RiskAnalysis[]>([]);
   const [signatureVerifications, setSignatureVerifications] = useState<SignatureVerification[]>([]);
 
-  useEffect(() => {
+  function refresh() {
     api
       .listAttestations()
       .then(setAttestations)
@@ -48,7 +51,10 @@ export function AnalyticsPage({ env, api }: { env: AppEnv; api: ApiClient }) {
       .listSignatureVerifications()
       .then(setSignatureVerifications)
       .catch(() => undefined);
-  }, [api]);
+  }
+
+  useEffect(refresh, [api]);
+  useLiveStream(`${env.backendUrl}/api/events`, LIVE_KINDS, refresh);
 
   const streams = useMemo(
     () => buildStreams(attestations, policies, payments, riskAnalyses, signatureVerifications),

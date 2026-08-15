@@ -259,3 +259,95 @@ treasury-management action, not something that should happen automatically
 on every settlement, `agent/scripts/depositToGateway.ts` is a standalone
 script (same category as `scripts/deploy.ts`), not a hook the runtime agent
 calls itself.
+
+## Post-Milestone-3: admin auth, ZK threshold verifier, on-chain business rules
+
+### `ADMIN_TOKEN` is one shared secret, not session/JWT machinery
+
+`AdminDashboard` had zero auth — anyone with the URL could approve/reject
+fraud-flagged payouts. `requireAdminToken` gates every admin route
+(`/api/fraud-alerts`, `/api/agent-health`, `/api/settlement-queue`) behind a
+single bearer token, registered via `app.use(path, requireAdminToken)` ahead
+of the routes rather than chained as a second handler argument — chaining it
+inline broke Express's path-param type inference (`req.params.id` widened to
+`string | string[] | undefined`), a real TS+Express quirk, not a style
+choice. The long-term fix is identity-backed auth tied to a real wallet
+session; this closes the actual exploitable hole by the deadline.
+
+### `RewardPolicy`/`RewardDispatcher` gained on-chain cooldown and reward caps
+
+`Policy` now carries `cooldownSeconds` and `maxRewardsPerSupplier`, set once
+at creation (matching `credentialType`'s existing set-once precedent, not
+updatable after the fact). `RewardDispatcher.dispatchReward()` enforces both
+via `_lastDispatchedAt`/`_dispatchCount` mappings, throwing
+`CooldownActive`/`MaxRewardsExceeded` — enforced in the contract itself, not
+just the backend, so the guarantee holds regardless of which client submits
+the dispatch.
+
+### A Groth16 threshold-check circuit and verifier were added for private claims
+
+`circuits/thresholdCheck.circom` proves `value >= threshold` without
+revealing `value` (via circomlib's `GreaterEqThan`), with a real trusted
+setup (Powers of Tau) run locally. `ThresholdVerifier.sol` is `snarkjs`'s
+auto-generated verifier (renamed from `Groth16Verifier` for consistency with
+this project's other contract names; the verifier logic itself is untouched,
+byte-identical to what was independently re-verified on-chain for both a
+valid and an invalid proof). Deployed standalone — nothing in the existing
+attestation/reward flow calls it yet; wiring it into `EvidenceSubmission` as
+an optional `zkProof` field is a follow-up, not done this pass.
+
+### Redeploying `RewardPolicy`/`RewardDispatcher` orphans every existing policy — there's no migration step
+
+The cooldown/cap fields above required redeploying `RewardPolicy` and
+`RewardDispatcher` (`RewardPolicyRedeployModule`, keeping
+`AttestationRegistry` untouched to preserve real attestation history). This
+was **not** initially followed by recreating the policies on the new
+contract, which silently broke every existing attestation's "Policy Matched"
+node (the new contract starts with zero policies) and meant the agent's
+`watchContractEvent`-based live listener — which has no historical
+backfill, by design (see `rpcRetry.ts`'s note on `HistoryService`, which
+_does_ backfill) — never re-evaluated old attestations against the new
+dispatcher, so no reward the redeploy predates will ever settle
+retroactively. The policies were manually recreated afterward from the old
+contract's on-chain state (read directly off the pre-redeploy
+`RewardPolicy` address before it was orphaned). Any future contract redeploy
+that carries policy data needs an explicit recreation step in the same
+change — it is not automatic.
+
+### `attestationReader.ts` needed the same shared RPC pacer as every other service
+
+`getProofHash()` (used by `tryAnalyzeRiskForNewEvidence`'s fallback scan,
+which can probe up to 100 attestation ids in a tight loop) was calling
+`client.readContract` directly, bypassing `withRpcRetries`'s shared gate —
+the one RPC-calling service in the codebase that did. Under Arc testnet's
+aggressive rate limiting, an unpaced burst of `getProofHash` calls could
+silently starve itself (each rate-limited call swallowed by
+`.catch(() => undefined)`, indistinguishable from "attestation doesn't
+exist yet"), so it now goes through `withRpcRetries` like every other
+service.
+
+### Deployed: Render (backend) + Vercel (frontend), CORS wired explicitly between them
+
+The backend needs a long-running process (live chain watchers via `tsx`),
+not a serverless function, so it's a Render Web Service — `npm install` as
+the build command (not `npm run build`; `tsx` runs the TypeScript directly
+and `agent`/`protocol` export raw `.ts` source, so the `tsc`/`hardhat
+compile` build step isn't needed at runtime at all). The frontend is a
+static Vite build on Vercel, with its root directory pinned to
+`apps/frontend` (a bare `apps` root let Vercel's monorepo auto-detection
+grab `apps/backend` instead, alphabetically first). The two are connected by
+two env vars that don't default to each other: Vercel's `VITE_BACKEND_URL`
+points at the Render URL, and Render's `CORS_ORIGIN` must be set to the
+Vercel URL explicitly — the default (`http://localhost:5173`) silently
+blocks every request from the deployed frontend with no server-side error,
+only a browser-console CORS failure.
+
+### The "Powered by" attribution names Arc, not Circle
+
+The sidebar (`AppShell.tsx`) and landing footer both credit the chain the
+app actually runs on (Arc) rather than Circle broadly — Circle is still
+named in the product copy itself (it operates Arc, the Gateway/CCTP/Gas
+Station rails, and the wallets), but the logo attribution is chain-specific.
+The logo is hotlinked from `arc.io`'s own CDN, following the same
+established pattern as the prior Circle logo (a remote URL, not a
+repo-committed asset).

@@ -11,10 +11,13 @@ import { StreamActionsPanel } from '../components/pipeline/StreamActionsPanel.js
 import { StreamCard } from '../components/pipeline/StreamCard.js';
 import { StreamOrb } from '../components/pipeline/StreamOrb.js';
 import { StreamTimeline } from '../components/pipeline/StreamTimeline.js';
+import { useLiveStream } from '../hooks/useLiveStream.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
 import { buildStreams, getOrbState } from '../lib/streams.js';
 import type { Payment, RiskAnalysis, SignatureVerification } from '@provenance-streams/protocol';
+
+const LIVE_KINDS = ['attestation', 'payment', 'risk-analysis', 'signature-verification'] as const;
 
 export function StreamsOverview({ env, api }: { env: AppEnv; api: ApiClient }) {
   const [attestations, setAttestations] = useState<AttestationRecord[]>([]);
@@ -24,7 +27,7 @@ export function StreamsOverview({ env, api }: { env: AppEnv; api: ApiClient }) {
   const [signatureVerifications, setSignatureVerifications] = useState<SignatureVerification[]>([]);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
 
-  useEffect(() => {
+  function refresh() {
     api
       .listAttestations()
       .then(setAttestations)
@@ -45,7 +48,12 @@ export function StreamsOverview({ env, api }: { env: AppEnv; api: ApiClient }) {
       .listSignatureVerifications()
       .then(setSignatureVerifications)
       .catch(() => undefined);
-  }, [api]);
+  }
+
+  useEffect(refresh, [api]);
+  // `useLiveStream` captures `refresh` via a ref internally, so it doesn't
+  // need a stable reference — a plain function redefined each render is fine.
+  useLiveStream(`${env.backendUrl}/api/events`, LIVE_KINDS, refresh);
 
   const streams = useMemo(
     () => buildStreams(attestations, policies, payments, riskAnalyses, signatureVerifications),

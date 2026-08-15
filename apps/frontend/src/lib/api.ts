@@ -35,6 +35,8 @@ export interface WalletSession {
   userToken: string;
   encryptionKey: string;
   appId: string;
+  /** A real ProveStream-issued session token (not Circle's `userToken`) — send as `Authorization: Bearer` on role-gated routes. */
+  sessionToken: string;
 }
 
 export interface EmbeddedWallet {
@@ -58,8 +60,9 @@ async function request<T>(baseUrl: string, path: string, init?: RequestInit): Pr
   return response.json() as Promise<T>;
 }
 
-function adminHeaders(adminToken: string): RequestInit {
-  return { headers: { 'X-Admin-Token': adminToken } };
+/** Attaches a real session token (issued by `/api/admin/login` or `/api/wallet-sessions`) as a bearer credential for role-gated routes. */
+function bearerHeaders(sessionToken: string): RequestInit {
+  return { headers: { Authorization: `Bearer ${sessionToken}` } };
 }
 
 /** Like `request`, but resolves to `undefined` on a 404 instead of throwing (e.g. "no destination wallet registered yet"). */
@@ -83,50 +86,57 @@ export function createApiClient(baseUrl: string) {
     getHealth: () => request<{ status: string }>(baseUrl, '/api/health'),
     getTreasuryBalance: () => request<TreasuryBalance>(baseUrl, '/api/treasury'),
     listPolicies: () => request<PolicySummary[]>(baseUrl, '/api/policies'),
-    registerKnownPolicy: (id: string) =>
-      request<PolicySummary>(baseUrl, `/api/policies/${id}/register`, { method: 'POST' }),
+    registerKnownPolicy: (id: string, adminSessionToken: string) =>
+      request<PolicySummary>(baseUrl, `/api/policies/${id}/register`, {
+        method: 'POST',
+        ...bearerHeaders(adminSessionToken),
+      }),
     listAttestations: () => request<AttestationRecord[]>(baseUrl, '/api/attestations'),
     listPayments: () => request<Payment[]>(baseUrl, '/api/payments'),
     listRiskAnalyses: () => request<RiskAnalysis[]>(baseUrl, '/api/risk-analyses'),
     listSignatureVerifications: () =>
       request<SignatureVerification[]>(baseUrl, '/api/signature-verifications'),
 
-    registerDestinationWallet: (input: {
-      supplier: string;
-      chain: string;
-      address: string;
-      x402ClaimUrl?: string;
-    }) =>
+    registerDestinationWallet: (
+      input: {
+        supplier: string;
+        chain: string;
+        address: string;
+        x402ClaimUrl?: string;
+      },
+      supplierSessionToken: string,
+    ) =>
       request<DestinationWallet>(baseUrl, '/api/destination-wallet', {
         method: 'POST',
         body: JSON.stringify(input),
+        ...bearerHeaders(supplierSessionToken),
       }),
     getDestinationWallet: (supplier: string) =>
       requestOptional<DestinationWallet>(baseUrl, `/api/destination-wallet/${supplier}`),
 
     adminLogin: (token: string) =>
-      request<{ ok: boolean }>(baseUrl, '/api/admin/login', {
+      request<{ ok: boolean; sessionToken?: string }>(baseUrl, '/api/admin/login', {
         method: 'POST',
         body: JSON.stringify({ token }),
       }),
 
     listFraudAlerts: (adminToken: string) =>
-      request<FraudAlert[]>(baseUrl, '/api/fraud-alerts', adminHeaders(adminToken)),
+      request<FraudAlert[]>(baseUrl, '/api/fraud-alerts', bearerHeaders(adminToken)),
     approveFraudAlert: (rewardId: string, adminToken: string) =>
       request<{ ok: true }>(baseUrl, `/api/fraud-alerts/${rewardId}/approve`, {
         method: 'POST',
-        ...adminHeaders(adminToken),
+        ...bearerHeaders(adminToken),
       }),
     rejectFraudAlert: (rewardId: string, adminToken: string) =>
       request<{ ok: true }>(baseUrl, `/api/fraud-alerts/${rewardId}/reject`, {
         method: 'POST',
-        ...adminHeaders(adminToken),
+        ...bearerHeaders(adminToken),
       }),
 
     listSettlementQueue: (adminToken: string) =>
-      request<SettlementJobRecord[]>(baseUrl, '/api/settlement-queue', adminHeaders(adminToken)),
+      request<SettlementJobRecord[]>(baseUrl, '/api/settlement-queue', bearerHeaders(adminToken)),
     getAgentHealth: (adminToken: string) =>
-      request<AgentHealth>(baseUrl, '/api/agent-health', adminHeaders(adminToken)),
+      request<AgentHealth>(baseUrl, '/api/agent-health', bearerHeaders(adminToken)),
 
     createEvidenceSubmission: (input: {
       supplier: string;
@@ -142,15 +152,16 @@ export function createApiClient(baseUrl: string) {
         baseUrl,
         status ? `/api/evidence-submissions?status=${status}` : '/api/evidence-submissions',
       ),
-    rejectEvidenceSubmission: (proofHash: string) =>
+    rejectEvidenceSubmission: (proofHash: string, auditorSessionToken: string) =>
       request<{ ok: true }>(baseUrl, `/api/evidence-submissions/${proofHash}/reject`, {
         method: 'POST',
+        ...bearerHeaders(auditorSessionToken),
       }),
 
-    createWalletSession: (userId: string) =>
+    createWalletSession: (userId: string, role: 'auditor' | 'supplier') =>
       request<WalletSession>(baseUrl, '/api/wallet-sessions', {
         method: 'POST',
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify({ userId, role }),
       }),
 
     createWalletChallenge: (userId: string, userToken: string) =>

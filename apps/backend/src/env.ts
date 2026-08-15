@@ -25,13 +25,16 @@ const serverConfigSchema = z.object({
   attestationRegistryAddress: addressSchema,
   rewardPolicyAddress: addressSchema,
   rewardDispatcherAddress: addressSchema,
+  decisionRegistryAddress: addressSchema,
   operatorPrivateKey: z.string().min(1),
   treasuryPrivateKey: z.string().optional(),
   /** Shared secret gating every admin route (see docs/decisions.md) — required, no default, so the server refuses to boot without one rather than silently running unauthenticated. */
   adminToken: z.string().min(1),
+  /** Postgres connection string — required, no default, so the server refuses to boot without persistence rather than silently falling back to nothing. */
+  databaseUrl: z.string().min(1),
   circle: circleSchema.partial(),
   geminiApiKey: z.string().optional(),
-  geminiModel: z.string().min(1).default('gemini-2.0-flash'),
+  geminiModel: z.string().min(1).default('gemini-flash-latest'),
   nvidiaApiKey: z.string().optional(),
   nvidiaDeepseekModel: z.string().min(1).default('deepseek-ai/deepseek-v4-flash'),
   nvidiaMistralModel: z.string().min(1).default('mistralai/mixtral-8x22b-instruct-v0.1'),
@@ -45,11 +48,13 @@ export interface ServerConfig {
   port: number;
   corsOrigin: string;
   adminToken: string;
+  databaseUrl: string;
   rpcUrl: string;
   chainId: number;
   attestationRegistryAddress: `0x${string}`;
   rewardPolicyAddress: `0x${string}`;
   rewardDispatcherAddress: `0x${string}`;
+  decisionRegistryAddress: `0x${string}`;
   /** Block `RewardPolicy` was deployed at, so `PolicyService` doesn't scan from genesis. */
   rewardPolicyDeployedAtBlock: bigint;
   /** Block `AttestationRegistry` was deployed at, for `HistoryService`'s backfill. Falls back to `rewardPolicyDeployedAtBlock` (Ignition deploys all three contracts in one run, blocks apart at most). */
@@ -95,9 +100,11 @@ export function loadServerConfig(): ServerConfig {
     attestationRegistryAddress: process.env.CONTRACT_ADDRESS,
     rewardPolicyAddress: process.env.REWARD_POLICY_ADDRESS,
     rewardDispatcherAddress: process.env.REWARD_DISPATCHER_ADDRESS,
+    decisionRegistryAddress: process.env.DECISION_REGISTRY_ADDRESS,
     operatorPrivateKey: process.env.OPERATOR_PRIVATE_KEY,
     treasuryPrivateKey: process.env.TREASURY_PRIVATE_KEY,
     adminToken: process.env.ADMIN_TOKEN,
+    databaseUrl: process.env.DATABASE_URL,
     circle: {
       apiKey: process.env.CIRCLE_API_KEY,
       entitySecret: process.env.CIRCLE_ENTITY_SECRET,
@@ -135,11 +142,13 @@ export function loadServerConfig(): ServerConfig {
     port: raw.port,
     corsOrigin: raw.corsOrigin,
     adminToken: raw.adminToken,
+    databaseUrl: raw.databaseUrl,
     rpcUrl: raw.rpcUrl,
     chainId: raw.chainId,
     attestationRegistryAddress: raw.attestationRegistryAddress,
     rewardPolicyAddress: raw.rewardPolicyAddress,
     rewardDispatcherAddress: raw.rewardDispatcherAddress,
+    decisionRegistryAddress: raw.decisionRegistryAddress,
     rewardPolicyDeployedAtBlock: raw.rewardPolicyDeployedAtBlock,
     attestationRegistryDeployedAtBlock:
       raw.attestationRegistryDeployedAtBlock ?? raw.rewardPolicyDeployedAtBlock,

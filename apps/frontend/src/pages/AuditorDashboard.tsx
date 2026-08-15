@@ -12,6 +12,7 @@ import { TransactionResult } from '../components/TransactionResult.js';
 import { WalletChip } from '../components/WalletChip.js';
 import type { AppEnv } from '../env.js';
 import { useEmbeddedWallet } from '../hooks/useEmbeddedWallet.js';
+import { useLiveStream } from '../hooks/useLiveStream.js';
 import type { ApiClient, AttestationRecord, PolicySummary } from '../lib/api.js';
 import { getPublicClient } from '../lib/clients.js';
 import { formatRelativeTime } from '../lib/format.js';
@@ -22,6 +23,14 @@ import type {
   RiskAnalysis,
   SignatureVerification,
 } from '@provenance-streams/protocol';
+
+const LIVE_KINDS = [
+  'attestation',
+  'payment',
+  'risk-analysis',
+  'signature-verification',
+  'evidence-submission',
+] as const;
 
 export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
   const wallet = useEmbeddedWallet('auditor', api);
@@ -43,16 +52,7 @@ export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) 
       .catch(() => undefined);
   };
 
-  useEffect(() => {
-    if (wallet.status !== 'ready') {
-      return;
-    }
-    if (wallet.walletAddress) {
-      getPublicClient(env)
-        .getBalance({ address: wallet.walletAddress as `0x${string}` })
-        .then((value) => setBalance(formatEther(value)))
-        .catch(() => undefined);
-    }
+  function refresh() {
     api
       .listAttestations()
       .then(setAttestations)
@@ -74,7 +74,26 @@ export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) 
       .then(setSignatureVerifications)
       .catch(() => undefined);
     refreshPendingEvidence();
+  }
+
+  useEffect(() => {
+    if (wallet.status !== 'ready') {
+      return;
+    }
+    if (wallet.walletAddress) {
+      getPublicClient(env)
+        .getBalance({ address: wallet.walletAddress as `0x${string}` })
+        .then((value) => setBalance(formatEther(value)))
+        .catch(() => undefined);
+    }
+    refresh();
   }, [api, env, wallet.status, wallet.walletAddress, status.state]);
+
+  useLiveStream(
+    wallet.status === 'ready' ? `${env.backendUrl}/api/events` : undefined,
+    LIVE_KINDS,
+    refresh,
+  );
 
   async function handleAttestSubmission(submission: EvidenceSubmission) {
     setQueueError(undefined);
@@ -95,8 +114,12 @@ export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) 
 
   async function handleRejectSubmission(submission: EvidenceSubmission) {
     setQueueError(undefined);
+    if (!wallet.sessionToken) {
+      setQueueError('Sign in with your embedded wallet first.');
+      return;
+    }
     try {
-      await api.rejectEvidenceSubmission(submission.proofHash);
+      await api.rejectEvidenceSubmission(submission.proofHash, wallet.sessionToken);
       refreshPendingEvidence();
     } catch (error) {
       setQueueError(error instanceof Error ? error.message : 'Failed to reject this submission.');

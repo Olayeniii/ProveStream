@@ -162,6 +162,16 @@ export interface EvidenceSubmission {
 export type FraudAlertStatus = 'flagged' | 'approved' | 'rejected';
 
 /**
+ * Whether an admin's approve/reject decision has been anchored on-chain via
+ * `DecisionRegistry`, making it tamper-evident rather than just an
+ * overwritable status field. See `DecisionAnchorService`.
+ */
+export interface DecisionAnchor {
+  status: 'pending' | 'anchored' | 'failed';
+  txHash?: Hex;
+}
+
+/**
  * A payout the agent's rule-based `FraudService` flagged instead of
  * auto-dispatching, surfaced on the Admin dashboard for a human decision.
  * Created from `RunAgentHooks.onFraudFlagged`; `approve` re-enqueues the
@@ -179,6 +189,8 @@ export interface FraudAlert {
   status: FraudAlertStatus;
   createdAt: string;
   updatedAt: string;
+  /** Set once an admin resolves this alert (approve or reject); tracks the on-chain anchor of that decision. */
+  resolutionAnchor?: DecisionAnchor;
 }
 
 /** Lifecycle state of an in-flight or completed settlement job, mirroring `SettlementQueue`'s job states. */

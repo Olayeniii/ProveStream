@@ -1,8 +1,11 @@
+import { createLogger } from '@provenance-streams/logger';
 import { decodeCredentialType, rewardPolicyAbi } from '@provenance-streams/protocol';
 import type { Address } from 'viem';
 import { createPublicClient, http } from 'viem';
 
 import { summarizeRpcError, withRpcRetries } from './rpcRetry.js';
+
+const logger = createLogger('policyService');
 
 export interface PolicySummary {
   id: string;
@@ -92,7 +95,7 @@ export class PolicyService {
     };
   }
 
-  /** Snapshot of scan progress worth persisting across restarts — see `snapshotStore.ts`. */
+  /** Snapshot of scan progress worth persisting across restarts — see `db/repositories/chainScanProgressRepo.ts`. */
   getScanProgress(): { knownIds: string[]; scannedThroughBlock: string } {
     return {
       knownIds: [...this.knownIds].map((id) => id.toString()),
@@ -131,8 +134,8 @@ export class PolicyService {
           }),
         );
       } catch (error) {
-        console.error(
-          `PolicyService: stopped scanning at block ${start.toString()} (resumes here next call): ${summarizeRpcError(error)}`,
+        logger.error(
+          `stopped scanning at block ${start.toString()} (resumes here next call): ${summarizeRpcError(error)}`,
         );
         return;
       }
