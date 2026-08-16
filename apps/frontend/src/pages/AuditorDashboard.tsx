@@ -33,7 +33,7 @@ const LIVE_KINDS = [
 ] as const;
 
 export function AuditorDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
-  const wallet = useEmbeddedWallet('auditor', api);
+  const wallet = useEmbeddedWallet('auditor', api, env);
   const [status, setStatus] = useState<SubmissionStatus>({ state: 'idle' });
   const [balance, setBalance] = useState<string | undefined>(undefined);
   const [attestations, setAttestations] = useState<AttestationRecord[]>([]);

@@ -28,8 +28,10 @@ const serverConfigSchema = z.object({
   decisionRegistryAddress: addressSchema,
   operatorPrivateKey: z.string().min(1),
   treasuryPrivateKey: z.string().optional(),
-  /** Shared secret gating every admin route (see docs/decisions.md) — required, no default, so the server refuses to boot without one rather than silently running unauthenticated. */
+  /** Shared secret gating every admin route (see docs/decisions.md) — required, no default, so the server refuses to boot without one rather than silently running unauthenticated. Kept as a bootstrap/break-glass credential now that `adminEmails` below is the primary path. */
   adminToken: z.string().min(1),
+  /** Comma-separated allowlist of emails allowed to complete OTP login as `role: 'admin'` (see `POST /api/auth/email/complete`). Empty/unset means email-based admin login is off — `adminToken` is still the only way in. */
+  adminEmails: z.string().optional(),
   /** Postgres connection string — required, no default, so the server refuses to boot without persistence rather than silently falling back to nothing. */
   databaseUrl: z.string().min(1),
   circle: circleSchema.partial(),
@@ -48,6 +50,8 @@ export interface ServerConfig {
   port: number;
   corsOrigin: string;
   adminToken: string;
+  /** Lower-cased, trimmed emails allowed to become `role: 'admin'` via OTP login. */
+  adminEmails: string[];
   databaseUrl: string;
   rpcUrl: string;
   chainId: number;
@@ -104,6 +108,7 @@ export function loadServerConfig(): ServerConfig {
     operatorPrivateKey: process.env.OPERATOR_PRIVATE_KEY,
     treasuryPrivateKey: process.env.TREASURY_PRIVATE_KEY,
     adminToken: process.env.ADMIN_TOKEN,
+    adminEmails: process.env.ADMIN_EMAILS,
     databaseUrl: process.env.DATABASE_URL,
     circle: {
       apiKey: process.env.CIRCLE_API_KEY,
@@ -142,6 +147,10 @@ export function loadServerConfig(): ServerConfig {
     port: raw.port,
     corsOrigin: raw.corsOrigin,
     adminToken: raw.adminToken,
+    adminEmails: (raw.adminEmails ?? '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter((email) => email.length > 0),
     databaseUrl: raw.databaseUrl,
     rpcUrl: raw.rpcUrl,
     chainId: raw.chainId,

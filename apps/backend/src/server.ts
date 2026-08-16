@@ -62,6 +62,8 @@ export interface ServerDependencies {
    * design this replaced).
    */
   adminToken: string;
+  /** Emails allowed to complete OTP login as `role: 'admin'` (see `POST /api/auth/email/complete`) — empty means only the bootstrap token above grants admin. */
+  adminEmails: string[];
   /**
    * Called after a new evidence submission is persisted — lets the host retry
    * risk analysis for an already-attested proofHash match (see `main.ts`'s
@@ -113,6 +115,20 @@ const ADMIN_EMAIL = 'admin@provenance-streams.local';
 const createSessionBodySchema = z.object({
   userId: z.string().min(1),
   role: z.enum(['auditor', 'supplier']),
+});
+const startEmailLoginBodySchema = z.object({
+  email: z.string().email(),
+  deviceId: z.string().min(1),
+});
+const resendEmailLoginBodySchema = z.object({
+  email: z.string().email(),
+  deviceId: z.string().min(1),
+  otpToken: z.string().min(1),
+});
+const completeEmailLoginBodySchema = z.object({
+  email: z.string().email(),
+  role: z.enum(['auditor', 'supplier', 'admin']),
+  otpUserToken: z.string().min(1),
 });
 const createWalletChallengeBodySchema = z.object({ userToken: z.string().min(1) });
 const attestationChallengeBodySchema = z.object({
@@ -258,6 +274,27 @@ export function createServer(deps: ServerDependencies): Express {
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok' });
+  });
+
+  app.use('/api/auth/me', requireRole('admin', 'auditor', 'supplier'));
+  app.get('/api/auth/me', (req, res) => {
+    res.json(req.user);
+  });
+
+  app.use('/api/auth/logout', requireRole('admin', 'auditor', 'supplier'));
+  app.post('/api/auth/logout', (req, res, next) => {
+    // `requireRole` already validated this token and set `req.user` — reparsed
+    // here only because revoking needs the raw plaintext token to hash and
+    // match, which `requireRole` doesn't otherwise expose to the handler.
+    const token = req.header('Authorization')?.slice('Bearer '.length);
+    if (!token) {
+      res.status(401).json({ error: 'Missing session token.' });
+      return;
+    }
+    deps.sessionsRepo
+      .revoke(token)
+      .then(() => res.json({ ok: true }))
+      .catch(next);
   });
 
   // Every dashboard used to fetch once on mount and never again — this
@@ -525,15 +562,17 @@ export function createServer(deps: ServerDependencies): Express {
           return;
         }
 
-        return deps.store.updateFraudAlertStatus(alert.rewardId, 'approved').then(() => {
-          deps.agentControl.approvePayout({
-            rewardId: BigInt(alert.rewardId),
-            supplier: alert.supplier,
-            rewardAmount: BigInt(alert.rewardAmount),
+        return deps.store
+          .updateFraudAlertStatus(alert.rewardId, 'approved', req.user?.email)
+          .then(() => {
+            deps.agentControl.approvePayout({
+              rewardId: BigInt(alert.rewardId),
+              supplier: alert.supplier,
+              rewardAmount: BigInt(alert.rewardAmount),
+            });
+            void anchorFraudResolution(deps, alert.rewardId);
+            res.json({ ok: true });
           });
-          void anchorFraudResolution(deps, alert.rewardId);
-          res.json({ ok: true });
-        });
       })
       .catch(next);
   });
@@ -551,16 +590,18 @@ export function createServer(deps: ServerDependencies): Express {
           return;
         }
 
-        return deps.store.updateFraudAlertStatus(alert.rewardId, 'rejected').then(() =>
-          deps.store
-            .updatePaymentStatus(alert.rewardId, 'failed', {
-              error: 'Rejected by admin after fraud review.',
-            })
-            .then(() => {
-              void anchorFraudResolution(deps, alert.rewardId);
-              res.json({ ok: true });
-            }),
-        );
+        return deps.store
+          .updateFraudAlertStatus(alert.rewardId, 'rejected', req.user?.email)
+          .then(() =>
+            deps.store
+              .updatePaymentStatus(alert.rewardId, 'failed', {
+                error: 'Rejected by admin after fraud review.',
+              })
+              .then(() => {
+                void anchorFraudResolution(deps, alert.rewardId);
+                res.json({ ok: true });
+              }),
+          );
       })
       .catch(next);
   });
@@ -579,6 +620,84 @@ export function createServer(deps: ServerDependencies): Express {
       .catch(next);
   });
 
+  // Real, Circle-OTP-verified email login (see docs/decisions.md's superseded
+  // note on the old unverified scheme this closes) — a proof-of-ownership
+  // gate that runs *before* `/api/wallet-sessions` below, never a
+  // replacement for it. See `WalletService.createEmailLoginDeviceToken`'s
+  // docstring for why the two Circle identity paths are kept structurally
+  // separate.
+  app.post('/api/auth/email/start', sensitiveRateLimit, (req, res, next) => {
+    const walletService = requireWalletService(deps, res);
+    if (!walletService) {
+      return;
+    }
+    const body = startEmailLoginBodySchema.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: 'email and deviceId are required' });
+      return;
+    }
+    walletService
+      .createEmailLoginDeviceToken(body.data.email, body.data.deviceId)
+      .then((material) => res.json(material))
+      .catch(next);
+  });
+
+  app.post('/api/auth/email/resend', sensitiveRateLimit, (req, res, next) => {
+    const walletService = requireWalletService(deps, res);
+    if (!walletService) {
+      return;
+    }
+    const body = resendEmailLoginBodySchema.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: 'email, deviceId, and otpToken are required' });
+      return;
+    }
+    walletService
+      .resendEmailLoginOtp(body.data)
+      .then(() => res.json({ ok: true }))
+      .catch(next);
+  });
+
+  app.post('/api/auth/email/complete', sensitiveRateLimit, (req, res) => {
+    const walletService = requireWalletService(deps, res);
+    if (!walletService) {
+      return;
+    }
+    const body = completeEmailLoginBodySchema.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: 'email, role, and otpUserToken are required' });
+      return;
+    }
+    // A verified email alone doesn't grant admin — that role is restricted
+    // to an explicit allowlist (ADMIN_EMAILS), same operational shape as
+    // rotating ADMIN_TOKEN: edit an env var, redeploy. Everyone else who
+    // completes OTP can only become auditor/supplier, which `zod` already
+    // guarantees is all `body.data.role` could be if this check weren't
+    // needed — this exists specifically for the `role: 'admin'` case.
+    if (body.data.role === 'admin' && !deps.adminEmails.includes(body.data.email.toLowerCase())) {
+      res.status(403).json({ error: 'This email is not authorized for admin access.' });
+      return;
+    }
+    walletService
+      .verifyEmailLoginToken(body.data.otpUserToken)
+      .then(() => deps.usersRepo.upsert(body.data.email, body.data.role, true))
+      .then((user) => deps.sessionsRepo.create(user.id))
+      .then((session) => res.json({ sessionToken: session.token }))
+      .catch(() => {
+        // Never distinguish "bad OTP token" from "user doesn't exist" etc. in
+        // the response — same reasoning as any other auth failure, don't leak
+        // which part of the check failed.
+        res.status(401).json({ error: 'Could not verify this email login.' });
+      });
+  });
+
+  // `/api/wallet-sessions` now requires the caller to already hold a session
+  // from the email-OTP flow above — `/api/auth/email/complete` is the only
+  // place a `users` row gets created; this route still does its own,
+  // completely unchanged Circle `createUser`/`createUserToken` call to
+  // resolve the wallet, it just no longer trusts an unauthenticated
+  // `{userId, role}` body to establish identity.
+  app.use('/api/wallet-sessions', requireRole('auditor', 'supplier'));
   app.post('/api/wallet-sessions', sensitiveRateLimit, (req, res, next) => {
     const walletService = requireWalletService(deps, res);
     if (!walletService) {
@@ -591,14 +710,28 @@ export function createServer(deps: ServerDependencies): Express {
       return;
     }
 
-    Promise.all([
-      walletService.createSession(body.data.userId),
-      deps.usersRepo
-        .upsert(body.data.userId, body.data.role)
-        .then((user) => deps.sessionsRepo.create(user.id)),
-    ])
-      .then(([session, ownSession]) =>
-        res.json({ ...session, appId: walletService.appId, sessionToken: ownSession.token }),
+    // `requireRole` above already resolved and validated the caller's own
+    // session (`req.user`) — this route only ever resolves *that* identity's
+    // wallet, never an arbitrary body-supplied one, so a mismatch here means
+    // the caller is asking for someone else's wallet-session under their own
+    // token, which is rejected rather than silently ignored.
+    if (req.user?.email !== body.data.userId || req.user.role !== body.data.role) {
+      res.status(403).json({ error: 'userId/role must match the authenticated session.' });
+      return;
+    }
+
+    // Minting a brand-new ProveStream session on every reload, even though
+    // the caller already holds a perfectly valid one, was a real bug (see
+    // docs/decisions.md) — `requireRole` already required this exact header
+    // to reach here, so it's reused as-is rather than issuing a redundant
+    // session every time this route refreshes the Circle-side
+    // userToken/wallet list.
+    const ownToken = req.header('Authorization')?.slice('Bearer '.length);
+
+    walletService
+      .createSession(body.data.userId)
+      .then((session) =>
+        res.json({ ...session, appId: walletService.appId, sessionToken: ownToken }),
       )
       .catch(next);
   });

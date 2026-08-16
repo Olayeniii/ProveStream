@@ -12,6 +12,7 @@ interface Row {
   reasons: string[];
   status: FraudAlertStatus;
   resolution_anchor: DecisionAnchor | null;
+  resolved_by: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -29,6 +30,7 @@ function toAlert(row: Row): FraudAlert {
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
     ...(row.resolution_anchor ? { resolutionAnchor: row.resolution_anchor } : {}),
+    ...(row.resolved_by ? { resolvedBy: row.resolved_by } : {}),
   };
 }
 
@@ -65,10 +67,14 @@ export function createFraudAlertsRepo(pool: Pool) {
       return result.rows[0] ? toAlert(result.rows[0]) : undefined;
     },
 
-    async updateStatus(rewardId: string, status: FraudAlertStatus): Promise<void> {
+    async updateStatus(
+      rewardId: string,
+      status: FraudAlertStatus,
+      resolvedBy?: string,
+    ): Promise<void> {
       await pool.query(
-        'UPDATE fraud_alerts SET status = $2, updated_at = now() WHERE reward_id = $1',
-        [rewardId, status],
+        'UPDATE fraud_alerts SET status = $2, resolved_by = $3, updated_at = now() WHERE reward_id = $1',
+        [rewardId, status, resolvedBy ?? null],
       );
     },
 

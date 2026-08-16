@@ -6,11 +6,30 @@ import type { EmbeddedWalletState } from '../hooks/useEmbeddedWallet.js';
 
 export function EmbeddedWalletLogin({ wallet }: { wallet: EmbeddedWalletState }) {
   const [email, setEmail] = useState('');
+  const awaitingOtp = wallet.status === 'awaiting-otp';
   const busy = wallet.status === 'logging-in' || wallet.status === 'creating-wallet';
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     wallet.login(email);
+  }
+
+  // Circle's own hosted iframe collects the emailed code directly — this
+  // component never sees or asks for it. Once `login()` gets past that
+  // step it's indistinguishable from any other in-progress sign-in.
+  if (awaitingOtp) {
+    return (
+      <Form as="div">
+        <OtpNotice>
+          Check <strong>{email}</strong> for a verification code, then enter it in the window Circle
+          opened.
+        </OtpNotice>
+        <ResendButton type="button" onClick={wallet.resendOtp}>
+          Resend code
+        </ResendButton>
+        {wallet.error && <ErrorText>{wallet.error}</ErrorText>}
+      </Form>
+    );
   }
 
   return (
@@ -76,6 +95,31 @@ const LoginButton = styled.button`
   &:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+`;
+
+const OtpNotice = styled.p`
+  width: 100%;
+  margin: 0;
+  font-size: 0.85rem;
+  color: ${(props) => props.theme.colors.text};
+
+  strong {
+    color: ${(props) => props.theme.colors.primary};
+  }
+`;
+
+const ResendButton = styled.button`
+  padding: 0;
+  border: none;
+  background: none;
+  color: ${(props) => props.theme.colors.textMuted};
+  font-size: 0.8rem;
+  text-decoration: underline;
+  cursor: pointer;
+
+  &:hover {
+    color: ${(props) => props.theme.colors.text};
   }
 `;
 

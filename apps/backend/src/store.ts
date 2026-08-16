@@ -275,8 +275,12 @@ export class Store {
     return this.fraudAlertsRepo.get(rewardId);
   }
 
-  async updateFraudAlertStatus(rewardId: string, status: FraudAlertStatus): Promise<void> {
-    await this.fraudAlertsRepo.updateStatus(rewardId, status);
+  async updateFraudAlertStatus(
+    rewardId: string,
+    status: FraudAlertStatus,
+    resolvedBy?: string,
+  ): Promise<void> {
+    await this.fraudAlertsRepo.updateStatus(rewardId, status, resolvedBy);
     this.emitChange('fraud-alert');
   }
 

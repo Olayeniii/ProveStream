@@ -9,7 +9,7 @@ import type {
   SignatureVerification,
 } from '@provenance-streams/protocol';
 import { CheckCircle2, ExternalLink, XCircle } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import styled from 'styled-components';
 
 import { AppShell } from '../components/AppShell.js';
@@ -18,6 +18,7 @@ import { useLiveStream } from '../hooks/useLiveStream.js';
 import { ADMIN_SESSION_STORAGE_KEY } from '../lib/adminSession.js';
 import type { AppEnv } from '../env.js';
 import type { ApiClient, AttestationRecord } from '../lib/api.js';
+import { createDeviceIdSdk, verifyEmailOtp } from '../lib/embeddedWallet.js';
 import { formatRelativeTime } from '../lib/format.js';
 import type { StreamTone } from '../lib/streams.js';
 import { getToneColor } from '../lib/tone.js';
@@ -93,9 +94,11 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
   const [adminToken, setAdminToken] = useState<string | undefined>(
     () => sessionStorage.getItem(ADMIN_SESSION_STORAGE_KEY) ?? undefined,
   );
+  const [adminEmail, setAdminEmail] = useState<string | undefined>(undefined);
   const [loginValue, setLoginValue] = useState('');
   const [loginError, setLoginError] = useState<string | undefined>(undefined);
   const [loggingIn, setLoggingIn] = useState(false);
+  const [showTokenFallback, setShowTokenFallback] = useState(false);
 
   const handleLogin = () => {
     if (!loginValue.trim()) {
@@ -119,10 +122,96 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
       .finally(() => setLoggingIn(false));
   };
 
+  // Real, per-admin identity (see docs/decisions.md's Phase 3 note) — the
+  // primary sign-in path now; ADMIN_TOKEN above stays as a break-glass
+  // fallback for when OTP email delivery itself is the thing that's broken.
+  // Admin never needs a Circle wallet, so this stops short of the full
+  // useEmbeddedWallet flow — it only ever calls the three /api/auth/email/*
+  // routes, never wallet-session/creation.
+  const [emailValue, setEmailValue] = useState('');
+  const [emailLoginStatus, setEmailLoginStatus] = useState<'idle' | 'awaiting-otp' | 'logging-in'>(
+    'idle',
+  );
+  const [emailLoginError, setEmailLoginError] = useState<string | undefined>(undefined);
+  const otpMaterialRef = useRef<{ email: string; deviceId: string; otpToken: string } | undefined>(
+    undefined,
+  );
+
+  const handleEmailLogin = () => {
+    const email = emailValue.trim().toLowerCase();
+    if (!email || !env.circleAppId) {
+      return;
+    }
+    setEmailLoginError(undefined);
+    setEmailLoginStatus('logging-in');
+
+    void (async () => {
+      try {
+        const deviceId = await createDeviceIdSdk(env.circleAppId!).getDeviceId();
+        const material = await api.startEmailLogin(email, deviceId);
+        otpMaterialRef.current = { email, deviceId, ...material };
+
+        setEmailLoginStatus('awaiting-otp');
+        const otpResult = await verifyEmailOtp(env.circleAppId!, material);
+        otpMaterialRef.current = undefined;
+
+        setEmailLoginStatus('logging-in');
+        const { sessionToken } = await api.completeEmailLogin(email, 'admin', otpResult.userToken);
+        sessionStorage.setItem(ADMIN_SESSION_STORAGE_KEY, sessionToken);
+        setAdminToken(sessionToken);
+        setAdminEmail(email);
+        setEmailLoginStatus('idle');
+      } catch (error) {
+        otpMaterialRef.current = undefined;
+        setEmailLoginError(
+          error instanceof Error ? error.message : 'Failed to sign in with email.',
+        );
+        setEmailLoginStatus('idle');
+      }
+    })();
+  };
+
+  const handleResendOtp = () => {
+    const material = otpMaterialRef.current;
+    if (!material) {
+      return;
+    }
+    api
+      .resendEmailLoginOtp(material.email, material.deviceId, material.otpToken)
+      .catch(() => setEmailLoginError('Failed to resend the code. Try again in a moment.'));
+  };
+
   const handleLogout = () => {
+    // Best-effort: logging out locally should never be blocked by the
+    // network, but a reachable backend should actually revoke the token
+    // rather than leaving it valid until its 24h TTL lapses on its own.
+    if (adminToken) {
+      api.logout(adminToken).catch(() => undefined);
+    }
     sessionStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
     setAdminToken(undefined);
+    setAdminEmail(undefined);
   };
+
+  // A token restored from `sessionStorage` on mount could already be
+  // expired or revoked — without this, every fetch below would just fail
+  // silently forever (each one already swallows its own errors) instead of
+  // surfacing a real "you're signed out" state. Doubles as how a *restored*
+  // session (as opposed to one just minted by handleEmailLogin above)
+  // learns which admin it belongs to, for display.
+  useEffect(() => {
+    if (!adminToken) {
+      return;
+    }
+    api
+      .getMe(adminToken)
+      .then((session) => setAdminEmail(session.email))
+      .catch(() => {
+        sessionStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+        setAdminToken(undefined);
+        setAdminEmail(undefined);
+      });
+  }, [api, adminToken]);
 
   const [attestations, setAttestations] = useState<AttestationRecord[]>([]);
   const [health, setHealth] = useState<HealthState>({ backend: 'checking', treasury: 'checking' });
@@ -262,24 +351,64 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
       >
         <Card>
           <SectionTitle>Sign in</SectionTitle>
-          <LoginRow>
-            <LoginInput
-              type="password"
-              placeholder="Admin token"
-              value={loginValue}
-              onChange={(event) => setLoginValue(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  handleLogin();
-                }
-              }}
-              disabled={loggingIn}
-            />
-            <LoginButton onClick={handleLogin} disabled={loggingIn}>
-              {loggingIn ? 'Signing in…' : 'Sign in'}
-            </LoginButton>
-          </LoginRow>
-          {loginError && <ErrorText>{loginError}</ErrorText>}
+          {emailLoginStatus === 'awaiting-otp' ? (
+            <>
+              <OtpNotice>
+                Check <strong>{otpMaterialRef.current?.email ?? emailValue}</strong> for a
+                verification code, then enter it in the window Circle opened.
+              </OtpNotice>
+              <ResendLink type="button" onClick={handleResendOtp}>
+                Resend code
+              </ResendLink>
+            </>
+          ) : (
+            <LoginRow>
+              <LoginInput
+                type="email"
+                placeholder="you@provestream.xyz"
+                value={emailValue}
+                onChange={(event) => setEmailValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    handleEmailLogin();
+                  }
+                }}
+                disabled={emailLoginStatus === 'logging-in'}
+              />
+              <LoginButton onClick={handleEmailLogin} disabled={emailLoginStatus === 'logging-in'}>
+                {emailLoginStatus === 'logging-in' ? 'Signing in…' : 'Sign in'}
+              </LoginButton>
+            </LoginRow>
+          )}
+          {emailLoginError && <ErrorText>{emailLoginError}</ErrorText>}
+
+          {showTokenFallback ? (
+            <FallbackBlock>
+              <SectionTitle>Admin token (break-glass)</SectionTitle>
+              <LoginRow>
+                <LoginInput
+                  type="password"
+                  placeholder="Admin token"
+                  value={loginValue}
+                  onChange={(event) => setLoginValue(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      handleLogin();
+                    }
+                  }}
+                  disabled={loggingIn}
+                />
+                <LoginButton onClick={handleLogin} disabled={loggingIn}>
+                  {loggingIn ? 'Signing in…' : 'Sign in'}
+                </LoginButton>
+              </LoginRow>
+              {loginError && <ErrorText>{loginError}</ErrorText>}
+            </FallbackBlock>
+          ) : (
+            <ResendLink type="button" onClick={() => setShowTokenFallback(true)}>
+              Use admin token instead
+            </ResendLink>
+          )}
         </Card>
       </AppShell>
     );
@@ -291,7 +420,12 @@ export function AdminDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
       subtitle="System health, settlement queue, and fraud review"
       env={env}
       api={api}
-      headerActions={<SignOutButton onClick={handleLogout}>Sign out</SignOutButton>}
+      headerActions={
+        <>
+          {adminEmail && <AdminIdentity>{adminEmail}</AdminIdentity>}
+          <SignOutButton onClick={handleLogout}>Sign out</SignOutButton>
+        </>
+      }
     >
       <Card>
         <SectionTitle>Health</SectionTitle>
@@ -712,4 +846,40 @@ const SignOutButton = styled.button`
   &:hover {
     color: ${(props) => props.theme.colors.text};
   }
+`;
+
+const OtpNotice = styled.p`
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  color: ${(props) => props.theme.colors.text};
+
+  strong {
+    color: ${(props) => props.theme.colors.primary};
+  }
+`;
+
+const ResendLink = styled.button`
+  padding: 0;
+  margin-top: 8px;
+  border: none;
+  background: none;
+  color: ${(props) => props.theme.colors.textMuted};
+  font-size: 0.8rem;
+  text-decoration: underline;
+  cursor: pointer;
+
+  &:hover {
+    color: ${(props) => props.theme.colors.text};
+  }
+`;
+
+const FallbackBlock = styled.div`
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid ${(props) => props.theme.colors.border};
+`;
+
+const AdminIdentity = styled.span`
+  font-size: 0.8rem;
+  color: ${(props) => props.theme.colors.textMuted};
 `;

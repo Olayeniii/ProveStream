@@ -46,10 +46,19 @@ const LOG_SCAN_CHUNK_BLOCKS = 9_000n;
  * far (merged with whatever was already known) instead of a hard failure —
  * the next call picks up exactly where this one left off.
  */
+// How long a successful `readPolicy` result is trusted before re-reading it
+// from chain. Policy state barely changes (only `updatePolicy`/`disablePolicy`,
+// both rare admin actions) but `listPolicies()` gets called on every page
+// load/poll — without this, every single call re-reads every known policy
+// from a rate-limited RPC, which is what made this endpoint able to hang for
+// 30s+ under load in the first place.
+const POLICY_CACHE_TTL_MS = 30_000;
+
 export class PolicyService {
   private readonly client;
   private readonly knownIds: Set<bigint>;
   private scannedThroughBlock: bigint;
+  private readonly policyCache = new Map<string, { policy: PolicySummary; fetchedAt: number }>();
 
   constructor(private readonly config: PolicyServiceConfig) {
     this.client = createPublicClient({ transport: http(config.rpcUrl) });
@@ -57,12 +66,26 @@ export class PolicyService {
     this.scannedThroughBlock = (config.fromBlock ?? 0n) - 1n;
   }
 
+  /**
+   * Never lets a single struggling policy read (or the log scan itself)
+   * block or fail the whole response — each read is isolated, and a policy
+   * that can't be freshly read right now just falls back to its last known
+   * good value instead of taking every other policy down with it.
+   */
   async listPolicies(): Promise<PolicySummary[]> {
-    await this.scanNewPolicyCreatedLogs();
+    try {
+      await this.scanNewPolicyCreatedLogs();
+    } catch (error) {
+      logger.error(`log scan failed, serving known ids only: ${summarizeRpcError(error)}`);
+    }
 
-    const policies = await Promise.all([...this.knownIds].map((id) => this.readPolicy(id)));
+    const policies = await Promise.all(
+      [...this.knownIds].map((id) => this.readPolicyCached(id)),
+    );
 
-    return policies.sort((a, b) => Number(b.id) - Number(a.id));
+    return policies.filter((policy): policy is PolicySummary => policy !== undefined).sort(
+      (a, b) => Number(b.id) - Number(a.id),
+    );
   }
 
   /**
@@ -73,8 +96,37 @@ export class PolicyService {
    */
   async registerKnownPolicy(id: bigint): Promise<PolicySummary> {
     const policy = await this.readPolicy(id);
+    this.policyCache.set(id.toString(), { policy, fetchedAt: Date.now() });
     this.knownIds.add(id);
     return policy;
+  }
+
+  /**
+   * Serves a cached policy if it's still fresh; otherwise tries a real read
+   * and falls back to a stale cached value (rather than failing outright) if
+   * that read fails. Only returns `undefined` for a policy that has never
+   * once been successfully read — everything else degrades gracefully.
+   */
+  private async readPolicyCached(id: bigint): Promise<PolicySummary | undefined> {
+    const key = id.toString();
+    const cached = this.policyCache.get(key);
+    if (cached && Date.now() - cached.fetchedAt < POLICY_CACHE_TTL_MS) {
+      return cached.policy;
+    }
+    try {
+      const policy = await this.readPolicy(id);
+      this.policyCache.set(key, { policy, fetchedAt: Date.now() });
+      return policy;
+    } catch (error) {
+      if (cached) {
+        logger.error(
+          `re-read of policy ${key} failed, serving stale cached value: ${summarizeRpcError(error)}`,
+        );
+        return cached.policy;
+      }
+      logger.error(`read of policy ${key} failed with no cached fallback: ${summarizeRpcError(error)}`);
+      return undefined;
+    }
   }
 
   private async readPolicy(id: bigint): Promise<PolicySummary> {

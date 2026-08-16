@@ -522,6 +522,7 @@ async function main(): Promise<void> {
   const app = createServer({
     corsOrigin: config.corsOrigin,
     adminToken: config.adminToken,
+    adminEmails: config.adminEmails,
     usersRepo,
     sessionsRepo,
     store,

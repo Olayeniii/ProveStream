@@ -39,6 +39,12 @@ export interface WalletSession {
   sessionToken: string;
 }
 
+export interface AuthenticatedSession {
+  userId: string;
+  email: string;
+  role: 'admin' | 'auditor' | 'supplier';
+}
+
 export interface EmbeddedWallet {
   id: string;
   address: string;
@@ -158,10 +164,51 @@ export function createApiClient(baseUrl: string) {
         ...bearerHeaders(auditorSessionToken),
       }),
 
-    createWalletSession: (userId: string, role: 'auditor' | 'supplier') =>
+    /**
+     * `existingSessionToken`, when it's still valid for this exact `userId`/`role`,
+     * lets the backend reuse it instead of minting a redundant session — the
+     * resume-on-reload path (see `useEmbeddedWallet.ts`) still needs to call this
+     * to refresh the Circle-side `userToken`/wallet list, but shouldn't churn a
+     * fresh ProveStream session every time it does.
+     */
+    createWalletSession: (
+      userId: string,
+      role: 'auditor' | 'supplier',
+      existingSessionToken?: string,
+    ) =>
       request<WalletSession>(baseUrl, '/api/wallet-sessions', {
         method: 'POST',
         body: JSON.stringify({ userId, role }),
+        ...(existingSessionToken ? bearerHeaders(existingSessionToken) : {}),
+      }),
+
+    getMe: (sessionToken: string) =>
+      request<AuthenticatedSession>(baseUrl, '/api/auth/me', bearerHeaders(sessionToken)),
+    logout: (sessionToken: string) =>
+      request<{ ok: true }>(baseUrl, '/api/auth/logout', {
+        method: 'POST',
+        ...bearerHeaders(sessionToken),
+      }),
+
+    startEmailLogin: (email: string, deviceId: string) =>
+      request<{ deviceToken: string; deviceEncryptionKey: string; otpToken: string }>(
+        baseUrl,
+        '/api/auth/email/start',
+        { method: 'POST', body: JSON.stringify({ email, deviceId }) },
+      ),
+    resendEmailLoginOtp: (email: string, deviceId: string, otpToken: string) =>
+      request<{ ok: true }>(baseUrl, '/api/auth/email/resend', {
+        method: 'POST',
+        body: JSON.stringify({ email, deviceId, otpToken }),
+      }),
+    completeEmailLogin: (
+      email: string,
+      role: 'auditor' | 'supplier' | 'admin',
+      otpUserToken: string,
+    ) =>
+      request<{ sessionToken: string }>(baseUrl, '/api/auth/email/complete', {
+        method: 'POST',
+        body: JSON.stringify({ email, role, otpUserToken }),
       }),
 
     createWalletChallenge: (userId: string, userToken: string) =>

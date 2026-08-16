@@ -47,6 +47,14 @@ export function createSessionsRepo(pool: Pool) {
       const row = result.rows[0];
       return row ? { userId: row.user_id, email: row.email, role: row.role } : undefined;
     },
+
+    /** Idempotent — revoking an already-revoked or nonexistent token is a no-op, not an error. */
+    async revoke(token: string): Promise<void> {
+      await pool.query(
+        'UPDATE sessions SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL',
+        [hashToken(token)],
+      );
+    },
   };
 }
 

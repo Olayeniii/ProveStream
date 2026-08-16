@@ -160,6 +160,59 @@ export class WalletService {
   }
 
   /**
+   * Starts Circle's real OTP-verified email login (`createDeviceTokenForEmailLogin`)
+   * — distinct from `createSession` above, which trusts a typed email
+   * unverified. This is a *separate* Circle identity path (its own endpoint
+   * takes no app-supplied `userId` at all), used here purely as a proof-of-
+   * email-ownership gate: the resulting tokens are verified once via
+   * `verifyEmailLoginToken` below, then discarded — they never touch wallet
+   * creation, so an existing wallet from `createSession`'s scheme can never
+   * be orphaned by this path.
+   */
+  async createEmailLoginDeviceToken(
+    email: string,
+    deviceId: string,
+  ): Promise<{ deviceToken: string; deviceEncryptionKey: string; otpToken: string }> {
+    const response = await this.client.createDeviceTokenForEmailLogin({ deviceId, email });
+    const { deviceToken, deviceEncryptionKey, otpToken } = response.data ?? {};
+    if (!deviceToken || !deviceEncryptionKey || !otpToken) {
+      throw new Error('Circle did not return device-token material for email login.');
+    }
+    return { deviceToken, deviceEncryptionKey, otpToken };
+  }
+
+  /**
+   * Re-sends the OTP email for an in-progress login. `userId: email` below
+   * is a best-effort choice, not a confirmed one — Circle's SDK types require
+   * one of `userId`/`userToken` here (`UserIdOrTokenInput`), but neither
+   * exists yet at this pre-verification point in the OTP-only identity path
+   * (see the docstring above). Needs confirming against a live Circle
+   * sandbox call once email-OTP login is enabled for this app in Circle's
+   * console — flagged, not yet exercised end-to-end.
+   */
+  async resendEmailLoginOtp(input: { email: string; deviceId: string; otpToken: string }) {
+    await this.client.resendOTP({
+      email: input.email,
+      deviceId: input.deviceId,
+      otpToken: input.otpToken,
+      userId: input.email,
+    });
+  }
+
+  /**
+   * Independently confirms a `userToken` from Circle's `EmailLoginResult` is
+   * genuine and currently valid — the backend must not just trust the
+   * frontend's claim that `verifyOtp()` succeeded, since anyone could send a
+   * fabricated token otherwise. A successful `getUserStatus` call is only
+   * possible for a token Circle itself issued after real OTP verification,
+   * which is what actually proves ownership here — not any field in the
+   * response, which is why this returns nothing on success.
+   */
+  async verifyEmailLoginToken(otpUserToken: string): Promise<void> {
+    await this.client.getUserStatus({ userToken: otpUserToken });
+  }
+
+  /**
    * Once the frontend reports a challenge as complete, resolves it to a
    * transaction hash: the challenge only carries a transaction id
    * (`correlationIds`), so this looks that up and then polls the transaction

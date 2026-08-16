@@ -191,6 +191,8 @@ export interface FraudAlert {
   updatedAt: string;
   /** Set once an admin resolves this alert (approve or reject); tracks the on-chain anchor of that decision. */
   resolutionAnchor?: DecisionAnchor;
+  /** The admin's email who approved/rejected this alert — unset for alerts resolved before per-admin identity existed, or via the ADMIN_TOKEN bootstrap path (which shares one identity across every admin). */
+  resolvedBy?: string;
 }
 
 /** Lifecycle state of an in-flight or completed settlement job, mirroring `SettlementQueue`'s job states. */

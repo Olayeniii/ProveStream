@@ -44,7 +44,7 @@ const LIVE_KINDS = [
 ] as const;
 
 export function SupplierDashboard({ env, api }: { env: AppEnv; api: ApiClient }) {
-  const wallet = useEmbeddedWallet('supplier', api);
+  const wallet = useEmbeddedWallet('supplier', api, env);
   const [balance, setBalance] = useState<string | undefined>(undefined);
   const [attestations, setAttestations] = useState<AttestationRecord[]>([]);
   const [policies, setPolicies] = useState<PolicySummary[]>([]);
