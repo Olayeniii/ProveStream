@@ -79,13 +79,11 @@ export class PolicyService {
       logger.error(`log scan failed, serving known ids only: ${summarizeRpcError(error)}`);
     }
 
-    const policies = await Promise.all(
-      [...this.knownIds].map((id) => this.readPolicyCached(id)),
-    );
+    const policies = await Promise.all([...this.knownIds].map((id) => this.readPolicyCached(id)));
 
-    return policies.filter((policy): policy is PolicySummary => policy !== undefined).sort(
-      (a, b) => Number(b.id) - Number(a.id),
-    );
+    return policies
+      .filter((policy): policy is PolicySummary => policy !== undefined)
+      .sort((a, b) => Number(b.id) - Number(a.id));
   }
 
   /**
@@ -124,7 +122,9 @@ export class PolicyService {
         );
         return cached.policy;
       }
-      logger.error(`read of policy ${key} failed with no cached fallback: ${summarizeRpcError(error)}`);
+      logger.error(
+        `read of policy ${key} failed with no cached fallback: ${summarizeRpcError(error)}`,
+      );
       return undefined;
     }
   }
